@@ -31,10 +31,28 @@ dependencies:
   flutter:
     sdk: flutter
 
-
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+
+  # Game engine
+  flame: ^1.18.0
+  flame_audio: ^2.1.0
+
+  # State management
+  provider: ^6.1.0
+
+  # Local storage
+  shared_preferences: ^2.2.0
+
+  # Monetization - Ads
+  google_mobile_ads: ^5.0.0
+
+  # Monetization - In-App Purchases
+  in_app_purchase: ^3.1.0
+
+  # UI utilities
+  flutter_animate: ^4.5.0
 
 dev_dependencies:
   flutter_test:
