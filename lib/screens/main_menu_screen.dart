@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/game_provider.dart';
 import '../providers/settings_provider.dart';
 import '../config/colors.dart';
+import 'game_screen.dart';
 
 /// Main menu screen
 /// Entry point of the game showing player stats and navigation
@@ -96,11 +97,12 @@ class MainMenuScreen extends StatelessWidget {
                       ElevatedButton(
                         onPressed: gameProvider.hasLives
                             ? () {
-                                // TODO: Navigate to game screen
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Game screen coming soon!'),
-                                    duration: Duration(seconds: 1),
+                                // Navigate to game screen
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => GameScreen(
+                                      levelNumber: gameProvider.currentLevel,
+                                    ),
                                   ),
                                 );
                               }
