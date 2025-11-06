@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "tech.nevrio.sequence_rush_game"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 35
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
