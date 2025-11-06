@@ -30,21 +30,30 @@ dependencies:
   # Icons
   cupertino_icons: ^1.0.8
 
+  # Game engine
+  flame: ^1.18.0
+  flame_audio: ^2.1.0
+
+  # State management
+  provider: ^6.1.0
+
+  # Local storage
+  shared_preferences: ^2.2.0
+
+  # Monetization - Ads
+  google_mobile_ads: ^5.0.0
+
+  # Monetization - In-App Purchases
+  in_app_purchase: ^3.1.0
+
+  # UI utilities
+  flutter_animate: ^4.5.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
   flutter_lints: ^4.0.0
 
-# For information on the generic Dart part of this file, see the
-# following page: https://dart.dev/tools/pub/pubspec
-
-# The following section is specific to Flutter packages.
 flutter:
   uses-material-design: true
 
