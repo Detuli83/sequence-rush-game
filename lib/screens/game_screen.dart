@@ -3,9 +3,12 @@ import 'package:provider/provider.dart';
 import 'package:flame/game.dart';
 import '../game/sequence_rush_game.dart';
 import '../providers/game_provider.dart';
+import '../providers/settings_provider.dart';
 import '../services/audio_service.dart';
+import '../services/ad_service.dart';
 import '../models/game_state.dart';
 import '../config/colors.dart';
+import '../config/constants.dart';
 import '../game/utils/score_calculator.dart';
 
 /// Main game screen that displays the Flame game and UI overlay
@@ -26,6 +29,9 @@ class _GameScreenState extends State<GameScreen> {
   GamePhase _currentPhase = GamePhase.memorize;
   double _timeRemaining = 0;
   bool _isInitialized = false;
+  bool _hintUsed = false;
+  bool _extraTimeUsed = false;
+  bool _slowMotionUsed = false;
 
   @override
   void initState() {
@@ -101,6 +107,7 @@ class _GameScreenState extends State<GameScreen> {
   void _handleGameComplete(bool success, double remainingTime) async {
     final gameProvider = context.read<GameProvider>();
     final audioService = context.read<AudioService>();
+    final adService = context.read<AdService>();
 
     if (success) {
       // Level complete
@@ -115,10 +122,64 @@ class _GameScreenState extends State<GameScreen> {
       audioService.playGameOverSound();
       await gameProvider.failLevel();
 
+      // Show interstitial ad every 3 game overs
+      await adService.showInterstitialAd();
+
       if (mounted) {
         _showGameOverDialog();
       }
     }
+  }
+
+  void _showPauseMenu() {
+    _game.pauseGame();
+    final settings = context.read<SettingsProvider>();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('⏸️ Paused'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Settings toggles
+            SwitchListTile(
+              title: const Text('Music'),
+              value: settings.musicEnabled,
+              onChanged: (_) => settings.toggleMusic(),
+            ),
+            SwitchListTile(
+              title: const Text('Sound Effects'),
+              value: settings.sfxEnabled,
+              onChanged: (_) => settings.toggleSfx(),
+            ),
+            SwitchListTile(
+              title: const Text('Haptics'),
+              value: settings.hapticsEnabled,
+              onChanged: (_) => settings.toggleHaptics(),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop(); // Close pause
+              Navigator.of(context).pop(); // Exit game
+            },
+            child: const Text('QUIT'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _game.resumeGame();
+              setState(() {});
+            },
+            child: const Text('RESUME'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showLevelCompleteDialog(int score, double remainingTime) {
@@ -180,6 +241,7 @@ class _GameScreenState extends State<GameScreen> {
 
   void _showGameOverDialog() {
     final gameProvider = context.read<GameProvider>();
+    final adService = context.read<AdService>();
 
     showDialog(
       context: context,
@@ -195,7 +257,26 @@ class _GameScreenState extends State<GameScreen> {
             ),
             const SizedBox(height: 16),
             if (!gameProvider.hasLives)
-              const Text('No lives left! Wait for regeneration or watch an ad.'),
+              Column(
+                children: [
+                  const Text('No lives left!'),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final success = await adService.showAdForLife(() {
+                        gameProvider.addLife();
+                      });
+                      if (success && mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Free life earned!')),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.play_circle),
+                    label: const Text('Watch Ad for Life'),
+                  ),
+                ],
+              ),
           ],
         ),
         actions: [
@@ -206,6 +287,27 @@ class _GameScreenState extends State<GameScreen> {
             },
             child: const Text('MENU'),
           ),
+          // Continue with ad option
+          if (adService.isRewardedReady)
+            TextButton(
+              onPressed: () async {
+                final success = await adService.showAdForContinue(() {
+                  // Reset game and continue
+                  Navigator.of(context).pop(); // Close dialog
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (_) => GameScreen(levelNumber: widget.levelNumber),
+                    ),
+                  );
+                });
+                if (!success && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Ad not available')),
+                  );
+                }
+              },
+              child: const Text('CONTINUE (AD)'),
+            ),
           if (gameProvider.hasLives)
             ElevatedButton(
               onPressed: () {
@@ -221,6 +323,73 @@ class _GameScreenState extends State<GameScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Future<void> _useHint() async {
+    if (_hintUsed || _currentPhase != GamePhase.execute) return;
+
+    final gameProvider = context.read<GameProvider>();
+    final audioService = context.read<AudioService>();
+
+    if (await gameProvider.useHint()) {
+      setState(() => _hintUsed = true);
+      audioService.playPowerUpSound();
+
+      // Replay sequence
+      _game.pauseGame();
+      await Future.delayed(const Duration(milliseconds: 500));
+      for (int i = 0; i < _game.sequence.length; i++) {
+        _game.gridManager.highlightButton(_game.sequence[i], true);
+        audioService.playButtonSound(_game.sequence[i]);
+        await Future.delayed(const Duration(milliseconds: 400));
+        _game.gridManager.highlightButton(_game.sequence[i], false);
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+      _game.resumeGame();
+    } else {
+      _showInsufficientCoinsSnackBar();
+    }
+  }
+
+  Future<void> _useExtraTime() async {
+    if (_extraTimeUsed || _currentPhase != GamePhase.execute) return;
+
+    final gameProvider = context.read<GameProvider>();
+    final audioService = context.read<AudioService>();
+
+    if (await gameProvider.useExtraTime()) {
+      setState(() => _extraTimeUsed = true);
+      audioService.playPowerUpSound();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('+5 seconds!')),
+      );
+    } else {
+      _showInsufficientCoinsSnackBar();
+    }
+  }
+
+  Future<void> _useSlowMotion() async {
+    if (_slowMotionUsed || _currentPhase != GamePhase.memorize) return;
+
+    final gameProvider = context.read<GameProvider>();
+    final audioService = context.read<AudioService>();
+
+    if (await gameProvider.useSlowMotion()) {
+      setState(() => _slowMotionUsed = true);
+      audioService.playPowerUpSound();
+      // TODO: Implement slow-mo effect in game
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Slow motion activated!')),
+      );
+    } else {
+      _showInsufficientCoinsSnackBar();
+    }
+  }
+
+  void _showInsufficientCoinsSnackBar() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Not enough coins!')),
     );
   }
 
@@ -297,6 +466,15 @@ class _GameScreenState extends State<GameScreen> {
                   ),
                 ),
               ),
+
+            // Power-ups bar at bottom
+            if (_currentPhase == GamePhase.execute || _currentPhase == GamePhase.memorize)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: _buildPowerUpsBar(),
+              ),
           ],
         ),
       ),
@@ -321,10 +499,10 @@ class _GameScreenState extends State<GameScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Back button
+              // Pause button
               IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.pause),
+                onPressed: _showPauseMenu,
               ),
 
               // Level info
@@ -377,6 +555,86 @@ class _GameScreenState extends State<GameScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildPowerUpsBar() {
+    return Consumer<GameProvider>(
+      builder: (context, gameProvider, _) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).scaffoldBackgroundColor.withOpacity(0.9),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 4,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _buildPowerUpButton(
+                icon: Icons.lightbulb,
+                label: 'Hint',
+                cost: GameConstants.hintCost,
+                enabled: !_hintUsed && _currentPhase == GamePhase.execute,
+                onPressed: _useHint,
+              ),
+              _buildPowerUpButton(
+                icon: Icons.access_time,
+                label: '+Time',
+                cost: GameConstants.extraTimeCost,
+                enabled: !_extraTimeUsed && _currentPhase == GamePhase.execute,
+                onPressed: _useExtraTime,
+              ),
+              _buildPowerUpButton(
+                icon: Icons.slow_motion_video,
+                label: 'Slow-Mo',
+                cost: GameConstants.slowMotionCost,
+                enabled: !_slowMotionUsed && _currentPhase == GamePhase.memorize,
+                onPressed: _useSlowMotion,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPowerUpButton({
+    required IconData icon,
+    required String label,
+    required int cost,
+    required bool enabled,
+    required VoidCallback onPressed,
+  }) {
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.4,
+      child: ElevatedButton(
+        onPressed: enabled ? onPressed : null,
+        style: ElevatedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          backgroundColor: enabled ? AppColors.accent : Colors.grey,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 20),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 10),
+            ),
+            Text(
+              '$cost',
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
