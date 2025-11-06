@@ -15,12 +15,7 @@ class StorageService {
     if (jsonString == null) {
       return PlayerData();
     }
-    try {
-      return PlayerData.fromJson(jsonDecode(jsonString));
-    } catch (e) {
-      // If there's an error parsing, return new player data
-      return PlayerData();
-    }
+    return PlayerData.fromJson(jsonDecode(jsonString));
   }
 
   Future<void> savePlayerData(PlayerData data) async {
@@ -53,24 +48,6 @@ class StorageService {
     final data = await loadPlayerData();
     data.settings[key] = value;
     await savePlayerData(data);
-  }
-
-  // Purchased items tracking
-  Future<void> savePurchasedItem(String productId) async {
-    final purchasedItems = _prefs?.getStringList('purchased_items') ?? [];
-    if (!purchasedItems.contains(productId)) {
-      purchasedItems.add(productId);
-      await _prefs?.setStringList('purchased_items', purchasedItems);
-    }
-  }
-
-  Future<bool> isPurchased(String productId) async {
-    final purchasedItems = _prefs?.getStringList('purchased_items') ?? [];
-    return purchasedItems.contains(productId);
-  }
-
-  Future<List<String>> getPurchasedItems() async {
-    return _prefs?.getStringList('purchased_items') ?? [];
   }
 
   // Clear all data (for testing)

@@ -4,59 +4,27 @@ import 'package:flutter/services.dart';
 class AudioService {
   bool _musicEnabled = true;
   bool _sfxEnabled = true;
-  bool _initialized = false;
 
   final Map<String, String> _sfxFiles = {
-    'red': 'button_red.mp3',
-    'blue': 'button_blue.mp3',
-    'green': 'button_green.mp3',
-    'yellow': 'button_yellow.mp3',
-    'orange': 'button_orange.mp3',
-    'purple': 'button_purple.mp3',
-    'pink': 'button_pink.mp3',
-    'cyan': 'button_cyan.mp3',
-    'success': 'success.mp3',
-    'error': 'error.mp3',
-    'click': 'click.mp3',
-    'coin': 'coin.mp3',
-    'level_complete': 'level_complete.mp3',
-    'powerup': 'powerup.mp3',
-    'life_lost': 'life_lost.mp3',
-    'purchase': 'purchase.mp3',
+    'red': 'button_red.ogg',
+    'blue': 'button_blue.ogg',
+    'green': 'button_green.ogg',
+    'yellow': 'button_yellow.ogg',
+    'orange': 'button_orange.ogg',
+    'purple': 'button_purple.ogg',
+    'pink': 'button_pink.ogg',
+    'cyan': 'button_cyan.ogg',
+    'success': 'success.ogg',
+    'error': 'error.ogg',
+    'click': 'click.ogg',
+    'coin': 'coin.ogg',
+    'level_complete': 'level_complete.ogg',
+    'powerup': 'powerup.ogg',
   };
 
   Future<void> init() async {
-    try {
-      // Note: Audio files should be placed in assets/audio/sfx/
-      // For now, we'll mark as initialized even if files don't exist
-      // In production, uncomment the preload code below after adding audio files
-
-      /*
-      await FlameAudio.audioCache.loadAll([
-        'audio/sfx/button_red.mp3',
-        'audio/sfx/button_blue.mp3',
-        'audio/sfx/button_green.mp3',
-        'audio/sfx/button_yellow.mp3',
-        'audio/sfx/button_orange.mp3',
-        'audio/sfx/button_purple.mp3',
-        'audio/sfx/button_pink.mp3',
-        'audio/sfx/button_cyan.mp3',
-        'audio/sfx/success.mp3',
-        'audio/sfx/error.mp3',
-        'audio/sfx/click.mp3',
-        'audio/sfx/coin.mp3',
-        'audio/sfx/level_complete.mp3',
-        'audio/sfx/powerup.mp3',
-        'audio/sfx/life_lost.mp3',
-        'audio/sfx/purchase.mp3',
-      ]);
-      */
-
-      _initialized = true;
-    } catch (e) {
-      print('Error initializing audio: $e');
-      _initialized = false;
-    }
+    // Preload sound effects would happen here when assets are available
+    // await FlameAudio.audioCache.loadAll([...]);
   }
 
   void setMusicEnabled(bool enabled) {
@@ -71,12 +39,8 @@ class AudioService {
   }
 
   Future<void> playMusic(String track) async {
-    if (!_musicEnabled || !_initialized) return;
-    try {
-      await FlameAudio.bgm.play('audio/music/$track.mp3', volume: 0.3);
-    } catch (e) {
-      print('Error playing music: $e');
-    }
+    if (!_musicEnabled) return;
+    // await FlameAudio.bgm.play('music/$track.ogg', volume: 0.3);
   }
 
   void stopMusic() {
@@ -94,13 +58,8 @@ class AudioService {
   }
 
   Future<void> playSfx(String name) async {
-    if (!_sfxEnabled || !_initialized || !_sfxFiles.containsKey(name)) return;
-    try {
-      await FlameAudio.play('audio/sfx/${_sfxFiles[name]}', volume: 0.5);
-    } catch (e) {
-      // Silently fail if audio file doesn't exist
-      // print('Error playing SFX: $e');
-    }
+    if (!_sfxEnabled || !_sfxFiles.containsKey(name)) return;
+    // await FlameAudio.play('sfx/${_sfxFiles[name]}', volume: 0.5);
   }
 
   void playButtonSound(int colorIndex) {
@@ -122,16 +81,4 @@ class AudioService {
   void playHaptic() {
     HapticFeedback.lightImpact();
   }
-
-  void playMediumHaptic() {
-    HapticFeedback.mediumImpact();
-  }
-
-  void playHeavyHaptic() {
-    HapticFeedback.heavyImpact();
-  }
-
-  bool get isMusicEnabled => _musicEnabled;
-  bool get isSfxEnabled => _sfxEnabled;
-  bool get isInitialized => _initialized;
 }

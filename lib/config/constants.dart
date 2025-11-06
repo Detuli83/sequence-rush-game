@@ -1,44 +1,35 @@
 class GameConstants {
-  // Lives System
+  // Lives system
   static const int maxLives = 5;
-  static const int lifeRegenMinutes = 15; // 1 life per 15 minutes
-  static const int maxAdLivesPerDay = 3;
+  static const int lifeRegenerationMinutes = 15;
 
-  // Currency
-  static const int coinsPerLevel = 10;
-  static const int coinsForPerfectLevel = 25;
-  static const int dailyLoginBonus = 50;
-  static const int coinsPerAd = 25;
-
-  // Power-Up Costs
+  // Currency costs
   static const int hintCost = 50;
   static const int extraTimeCost = 75;
   static const int slowMotionCost = 100;
   static const int skipLevelCost = 200;
 
+  // Rewards
+  static const int baseCoinsPerLevel = 10;
+  static const int perfectLevelCoinBonus = 25;
+  static const int dailyLoginBonus = 50;
+  static const int adRewardCoins = 25;
+
   // Scoring
-  static const int baseScoreMultiplier = 100;
-  static const int timeBonus = 50; // Points per second
+  static const int pointsPerSequenceStep = 100;
+  static const int pointsPerSecondRemaining = 50;
   static const int perfectLevelBonus = 500;
 
-  // Combo Multipliers
-  static const int combo3Multiplier = 2; // 1.5x (stored as int for precision)
-  static const int combo5Multiplier = 2;
-  static const int combo10Multiplier = 3;
+  // Combo system
+  static const int combo3Multiplier = 150; // 1.5x as int percentage
+  static const int combo5Multiplier = 200; // 2x
+  static const int combo10Multiplier = 300; // 3x
 
-  // Ad Frequency
-  static const int interstitialAdFrequency = 3; // Every 3 game overs
+  // Ad configuration
+  static const int gameOversBetweenInterstitial = 3;
+  static const int maxRewardedAdsPerDay = 3;
 
-  // App Information
-  static const String appName = 'Sequence Rush';
-  static const String appVersion = '1.0.0';
-
-  // URLs
-  static const String privacyPolicyUrl = 'https://example.com/privacy';
-  static const String termsOfServiceUrl = 'https://example.com/terms';
-  static const String supportEmail = 'support@sequencerush.com';
-
-  // Test Mode (set to false for production)
-  static const bool testAds = true; // Use test ad IDs
-  static const bool testIAP = true; // Use test product IDs
+  // Time limits (in seconds)
+  static const double defaultMemorizeTime = 3.0;
+  static const double defaultExecuteTime = 15.0;
 }

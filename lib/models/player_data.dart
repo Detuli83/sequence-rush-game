@@ -9,8 +9,6 @@ class PlayerData {
   int currentTheme;
   Set<int> completedAchievements;
   Map<String, bool> settings;
-  int adsWatchedForLivesToday;
-  DateTime lastAdForLifeDate;
 
   PlayerData({
     this.currentLevel = 1,
@@ -23,21 +21,17 @@ class PlayerData {
     this.currentTheme = 0,
     Set<int>? completedAchievements,
     Map<String, bool>? settings,
-    this.adsWatchedForLivesToday = 0,
-    DateTime? lastAdForLifeDate,
   })  : lastLifeUpdate = lastLifeUpdate ?? DateTime.now(),
         highScores = highScores ?? [],
         unlockedThemes = unlockedThemes ?? [0],
         completedAchievements = completedAchievements ?? {},
-        settings = settings ??
-            {
-              'music': true,
-              'sfx': true,
-              'haptics': true,
-            },
-        lastAdForLifeDate = lastAdForLifeDate ?? DateTime.now();
+        settings = settings ?? {
+          'music': true,
+          'sfx': true,
+          'haptics': true,
+        };
 
-  // Update lives based on time elapsed (1 life per 15 minutes)
+  // Update lives based on time elapsed
   void updateLives() {
     if (lives >= 5) return;
 
@@ -49,22 +43,6 @@ class PlayerData {
       lives = (lives + livesToAdd).clamp(0, 5);
       lastLifeUpdate = now;
     }
-  }
-
-  // Check if player can watch ad for life (max 3 per day)
-  bool canWatchAdForLife() {
-    final now = DateTime.now();
-    if (now.day != lastAdForLifeDate.day ||
-        now.month != lastAdForLifeDate.month ||
-        now.year != lastAdForLifeDate.year) {
-      adsWatchedForLivesToday = 0;
-      lastAdForLifeDate = now;
-    }
-    return adsWatchedForLivesToday < 3;
-  }
-
-  void incrementAdForLifeCount() {
-    adsWatchedForLivesToday++;
   }
 
   void addCoins(int amount) {
@@ -80,11 +58,6 @@ class PlayerData {
     gems += amount;
   }
 
-  void spendGems(int amount) {
-    gems -= amount;
-    if (gems < 0) gems = 0;
-  }
-
   void loseLife() {
     lives--;
     if (lives < 0) lives = 0;
@@ -92,11 +65,6 @@ class PlayerData {
 
   void addLife() {
     lives++;
-    if (lives > 5) lives = 5;
-  }
-
-  void addLives(int count) {
-    lives += count;
     if (lives > 5) lives = 5;
   }
 
@@ -112,8 +80,6 @@ class PlayerData {
       'currentTheme': currentTheme,
       'completedAchievements': completedAchievements.toList(),
       'settings': settings,
-      'adsWatchedForLivesToday': adsWatchedForLivesToday,
-      'lastAdForLifeDate': lastAdForLifeDate.toIso8601String(),
     };
   }
 
@@ -136,10 +102,6 @@ class PlayerData {
         'sfx': true,
         'haptics': true,
       }),
-      adsWatchedForLivesToday: json['adsWatchedForLivesToday'] ?? 0,
-      lastAdForLifeDate: json['lastAdForLifeDate'] != null
-          ? DateTime.parse(json['lastAdForLifeDate'])
-          : DateTime.now(),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/colors.dart';
 
 class CustomButton extends StatelessWidget {
   final String text;
@@ -7,6 +8,8 @@ class CustomButton extends StatelessWidget {
   final Color? textColor;
   final IconData? icon;
   final bool isOutlined;
+  final double? width;
+  final double? height;
 
   const CustomButton({
     super.key,
@@ -16,34 +19,46 @@ class CustomButton extends StatelessWidget {
     this.textColor,
     this.icon,
     this.isOutlined = false,
+    this.width,
+    this.height,
   });
 
   @override
   Widget build(BuildContext context) {
+    final buttonContent = _buildContent();
+
     if (isOutlined) {
-      return OutlinedButton(
+      return SizedBox(
+        width: width,
+        height: height,
+        child: OutlinedButton(
+          onPressed: onPressed,
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: buttonContent,
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: width,
+      height: height,
+      child: ElevatedButton(
         onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: backgroundColor ?? AppColors.accent,
+          foregroundColor: textColor ?? Colors.white,
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
         ),
-        child: _buildContent(),
-      );
-    }
-
-    return ElevatedButton(
-      onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: backgroundColor,
-        foregroundColor: textColor,
-        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        child: buttonContent,
       ),
-      child: _buildContent(),
     );
   }
 

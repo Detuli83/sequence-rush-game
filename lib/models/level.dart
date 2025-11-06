@@ -36,7 +36,7 @@ class Level {
         baseScore: 100 * (4 + (worldLevel ~/ 5)),
       );
     }
-    // World 3+: Advanced levels (8 colors)
+    // World 3+: Advanced levels
     else {
       final worldLevel = number - 40;
       return Level(

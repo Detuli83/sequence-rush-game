@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Button colors (for game sequence)
+  // Button colors
   static const Color red = Color(0xFFFF3B30);
   static const Color blue = Color(0xFF007AFF);
   static const Color green = Color(0xFF34C759);
@@ -28,18 +28,10 @@ class AppColors {
   static const Color success = green;
   static const Color warning = orange;
   static const Color error = red;
-  static const Color coin = yellow;
-  static const Color gem = purple;
 
   // Get button colors list
   static List<Color> getButtonColors(int count) {
     const colors = [red, blue, green, yellow, orange, purple, pink, cyan];
     return colors.take(count).toList();
-  }
-
-  // Get color by index
-  static Color getColorByIndex(int index) {
-    const colors = [red, blue, green, yellow, orange, purple, pink, cyan];
-    return colors[index % colors.length];
   }
 }
