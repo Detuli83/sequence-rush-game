@@ -4,6 +4,9 @@ import '../providers/game_provider.dart';
 import '../providers/settings_provider.dart';
 import '../config/colors.dart';
 import 'game_screen.dart';
+import 'shop_screen.dart';
+import 'achievements_screen.dart';
+import 'settings_screen.dart';
 
 /// Main menu screen
 /// Entry point of the game showing player stats and navigation
@@ -163,8 +166,10 @@ class MainMenuScreen extends StatelessWidget {
                         Icons.emoji_events,
                         'Achievements',
                         () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Coming soon!')),
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const AchievementsScreen(),
+                            ),
                           );
                         },
                       ),
@@ -173,8 +178,10 @@ class MainMenuScreen extends StatelessWidget {
                         Icons.shopping_bag,
                         'Shop',
                         () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Coming soon!')),
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ShopScreen(),
+                            ),
                           );
                         },
                       ),
@@ -183,8 +190,10 @@ class MainMenuScreen extends StatelessWidget {
                         Icons.settings,
                         'Settings',
                         () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Coming soon!')),
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const SettingsScreen(),
+                            ),
                           );
                         },
                       ),

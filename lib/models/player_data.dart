@@ -1,4 +1,5 @@
 import '../config/constants.dart';
+import 'daily_challenge.dart';
 
 /// Player data model for persistence
 /// Based on GDD Section 6.2 - Data Storage
@@ -15,9 +16,15 @@ class PlayerData {
   int consecutivePerfectLevels;
   int totalLevelsCompleted;
   int totalCoinsEarned;
+  int perfectLevelsCount;
+  int powerUpsUsedCount;
   DateTime? lastDailyRewardClaim;
+  DateTime? lastLoginDate;
+  int consecutiveDaysPlayed;
   int adsWatchedToday;
   DateTime? lastAdDate;
+  List<DailyChallenge> dailyChallenges;
+  int dailyChallengesCompleted;
 
   PlayerData({
     this.currentLevel = 1,
@@ -32,13 +39,20 @@ class PlayerData {
     this.consecutivePerfectLevels = 0,
     this.totalLevelsCompleted = 0,
     this.totalCoinsEarned = 0,
+    this.perfectLevelsCount = 0,
+    this.powerUpsUsedCount = 0,
     this.lastDailyRewardClaim,
+    this.lastLoginDate,
+    this.consecutiveDaysPlayed = 0,
     this.adsWatchedToday = 0,
     this.lastAdDate,
+    List<DailyChallenge>? dailyChallenges,
+    this.dailyChallengesCompleted = 0,
   })  : lastLifeUpdate = lastLifeUpdate ?? DateTime.now(),
         highScores = highScores ?? [],
         unlockedThemes = unlockedThemes ?? [0], // Theme 0 is free
-        completedAchievements = completedAchievements ?? {};
+        completedAchievements = completedAchievements ?? {},
+        dailyChallenges = dailyChallenges ?? [];
 
   /// Update lives based on time elapsed (1 life per 15 minutes)
   void updateLives() {
@@ -161,6 +175,68 @@ class PlayerData {
     return adsWatchedToday < GameConstants.maxRewardedAdsPerDay;
   }
 
+  /// Update consecutive days played
+  void updateConsecutiveDays() {
+    final now = DateTime.now();
+    if (lastLoginDate == null) {
+      // First login
+      consecutiveDaysPlayed = 1;
+      lastLoginDate = now;
+      return;
+    }
+
+    final daysSinceLastLogin = now.difference(lastLoginDate!).inDays;
+    if (daysSinceLastLogin == 1) {
+      // Consecutive day
+      consecutiveDaysPlayed++;
+    } else if (daysSinceLastLogin > 1) {
+      // Streak broken
+      consecutiveDaysPlayed = 1;
+    }
+    // If same day, don't update
+    lastLoginDate = now;
+  }
+
+  /// Update or generate daily challenges
+  void updateDailyChallenges() {
+    final now = DateTime.now();
+
+    // Check if we need new challenges
+    if (dailyChallenges.isEmpty ||
+        !_isSameDay(dailyChallenges.first.date, now)) {
+      // Generate new challenges for today
+      dailyChallenges = DailyChallenge.generateDailyChallenges(now);
+    }
+  }
+
+  /// Update daily challenge progress
+  void updateChallengeProgress(ChallengeType type, int value) {
+    for (var challenge in dailyChallenges) {
+      if (challenge.type == type && !challenge.isCompleted) {
+        if (type == ChallengeType.speedRun || type == ChallengeType.highScore) {
+          // For these types, we check if value meets or exceeds target
+          if (value >= challenge.targetValue) {
+            challenge.currentProgress = challenge.targetValue;
+            challenge.isCompleted = true;
+            dailyChallengesCompleted++;
+          }
+        } else {
+          // For cumulative challenges, increment progress
+          challenge.currentProgress++;
+          if (challenge.currentProgress >= challenge.targetValue) {
+            challenge.isCompleted = true;
+            dailyChallengesCompleted++;
+          }
+        }
+      }
+    }
+  }
+
+  /// Get all completed challenges that haven't been claimed
+  List<DailyChallenge> get unclaimedChallenges {
+    return dailyChallenges.where((c) => c.isCompleted).toList();
+  }
+
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
@@ -180,9 +256,15 @@ class PlayerData {
       'consecutivePerfectLevels': consecutivePerfectLevels,
       'totalLevelsCompleted': totalLevelsCompleted,
       'totalCoinsEarned': totalCoinsEarned,
+      'perfectLevelsCount': perfectLevelsCount,
+      'powerUpsUsedCount': powerUpsUsedCount,
       'lastDailyRewardClaim': lastDailyRewardClaim?.toIso8601String(),
+      'lastLoginDate': lastLoginDate?.toIso8601String(),
+      'consecutiveDaysPlayed': consecutiveDaysPlayed,
       'adsWatchedToday': adsWatchedToday,
       'lastAdDate': lastAdDate?.toIso8601String(),
+      'dailyChallenges': dailyChallenges.map((c) => c.toJson()).toList(),
+      'dailyChallengesCompleted': dailyChallengesCompleted,
     };
   }
 
@@ -212,13 +294,24 @@ class PlayerData {
       consecutivePerfectLevels: json['consecutivePerfectLevels'] as int? ?? 0,
       totalLevelsCompleted: json['totalLevelsCompleted'] as int? ?? 0,
       totalCoinsEarned: json['totalCoinsEarned'] as int? ?? 0,
+      perfectLevelsCount: json['perfectLevelsCount'] as int? ?? 0,
+      powerUpsUsedCount: json['powerUpsUsedCount'] as int? ?? 0,
       lastDailyRewardClaim: json['lastDailyRewardClaim'] != null
           ? DateTime.parse(json['lastDailyRewardClaim'] as String)
           : null,
+      lastLoginDate: json['lastLoginDate'] != null
+          ? DateTime.parse(json['lastLoginDate'] as String)
+          : null,
+      consecutiveDaysPlayed: json['consecutiveDaysPlayed'] as int? ?? 0,
       adsWatchedToday: json['adsWatchedToday'] as int? ?? 0,
       lastAdDate: json['lastAdDate'] != null
           ? DateTime.parse(json['lastAdDate'] as String)
           : null,
+      dailyChallenges: (json['dailyChallenges'] as List<dynamic>?)
+              ?.map((e) => DailyChallenge.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      dailyChallengesCompleted: json['dailyChallengesCompleted'] as int? ?? 0,
     );
   }
 
@@ -236,9 +329,15 @@ class PlayerData {
     int? consecutivePerfectLevels,
     int? totalLevelsCompleted,
     int? totalCoinsEarned,
+    int? perfectLevelsCount,
+    int? powerUpsUsedCount,
     DateTime? lastDailyRewardClaim,
+    DateTime? lastLoginDate,
+    int? consecutiveDaysPlayed,
     int? adsWatchedToday,
     DateTime? lastAdDate,
+    List<DailyChallenge>? dailyChallenges,
+    int? dailyChallengesCompleted,
   }) {
     return PlayerData(
       currentLevel: currentLevel ?? this.currentLevel,
@@ -253,9 +352,15 @@ class PlayerData {
       consecutivePerfectLevels: consecutivePerfectLevels ?? this.consecutivePerfectLevels,
       totalLevelsCompleted: totalLevelsCompleted ?? this.totalLevelsCompleted,
       totalCoinsEarned: totalCoinsEarned ?? this.totalCoinsEarned,
+      perfectLevelsCount: perfectLevelsCount ?? this.perfectLevelsCount,
+      powerUpsUsedCount: powerUpsUsedCount ?? this.powerUpsUsedCount,
       lastDailyRewardClaim: lastDailyRewardClaim ?? this.lastDailyRewardClaim,
+      lastLoginDate: lastLoginDate ?? this.lastLoginDate,
+      consecutiveDaysPlayed: consecutiveDaysPlayed ?? this.consecutiveDaysPlayed,
       adsWatchedToday: adsWatchedToday ?? this.adsWatchedToday,
       lastAdDate: lastAdDate ?? this.lastAdDate,
+      dailyChallenges: dailyChallenges ?? this.dailyChallenges,
+      dailyChallengesCompleted: dailyChallengesCompleted ?? this.dailyChallengesCompleted,
     );
   }
 }

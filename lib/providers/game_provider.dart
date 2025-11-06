@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import '../models/player_data.dart';
 import '../models/level.dart';
 import '../models/game_state.dart';
+import '../models/achievement.dart';
+import '../models/daily_challenge.dart';
 import '../services/storage_service.dart';
 import '../game/utils/sequence_generator.dart';
 import '../game/utils/score_calculator.dart';
@@ -20,6 +22,10 @@ class GameProvider with ChangeNotifier {
   GameProvider(this._storage) {
     _loadPlayerData();
   }
+
+  // Convenience getters
+  int get currentLevelNumber => _playerData.currentLevel;
+  List<DailyChallenge> get dailyChallenges => _playerData.dailyChallenges;
 
   // Getters
   PlayerData get playerData => _playerData;
@@ -45,6 +51,8 @@ class GameProvider with ChangeNotifier {
     try {
       _playerData = await _storage.loadPlayerData();
       _playerData.updateLives(); // Update lives based on time elapsed
+      _playerData.updateConsecutiveDays(); // Update consecutive days played
+      _playerData.updateDailyChallenges(); // Generate or update daily challenges
       await _savePlayerData();
       _isLoaded = true;
       notifyListeners();
@@ -165,9 +173,25 @@ class GameProvider with ChangeNotifier {
 
     if (state.isPerfectLevel) {
       _playerData.consecutivePerfectLevels++;
+      _playerData.perfectLevelsCount++;
     } else {
       _playerData.consecutivePerfectLevels = 0;
     }
+
+    // Update daily challenges
+    _playerData.updateChallengeProgress(ChallengeType.completeLevels, 1);
+    if (state.isPerfectLevel) {
+      _playerData.updateChallengeProgress(ChallengeType.perfectStreak, 1);
+    }
+    if (state.remainingTime >= 8) {
+      _playerData.updateChallengeProgress(ChallengeType.speedRun, state.remainingTime.toInt());
+    }
+    if (score >= 800) {
+      _playerData.updateChallengeProgress(ChallengeType.highScore, score);
+    }
+
+    // Check achievements
+    await _checkAndCompleteAchievements();
 
     await _savePlayerData();
 
@@ -283,16 +307,36 @@ class GameProvider with ChangeNotifier {
   /// Use hint power-up
   Future<bool> useHint() async {
     if (_currentGameState == null) return false;
-    return await spendCoins(GameConstants.hintCost);
+    if (await spendCoins(GameConstants.hintCost)) {
+      _playerData.powerUpsUsedCount++;
+      // Update daily challenge for no power-ups (they used one, so reset progress)
+      for (var challenge in _playerData.dailyChallenges) {
+        if (challenge.type == ChallengeType.noPowerUps && !challenge.isCompleted) {
+          challenge.currentProgress = 0;
+        }
+      }
+      await _savePlayerData();
+      notifyListeners();
+      return true;
+    }
+    return false;
   }
 
   /// Use extra time power-up
   Future<bool> useExtraTime() async {
     if (_currentGameState == null) return false;
     if (await spendCoins(GameConstants.extraTimeCost)) {
+      _playerData.powerUpsUsedCount++;
+      // Update daily challenge for no power-ups
+      for (var challenge in _playerData.dailyChallenges) {
+        if (challenge.type == ChallengeType.noPowerUps && !challenge.isCompleted) {
+          challenge.currentProgress = 0;
+        }
+      }
       // Add extra time to current game
       final newTime = _currentGameState!.remainingTime + GameConstants.extraTimeSeconds;
       _currentGameState = _currentGameState!.copyWith(remainingTime: newTime);
+      await _savePlayerData();
       notifyListeners();
       return true;
     }
@@ -302,7 +346,19 @@ class GameProvider with ChangeNotifier {
   /// Use slow motion power-up (not implemented in game state yet)
   Future<bool> useSlowMotion() async {
     if (_currentGameState == null) return false;
-    return await spendCoins(GameConstants.slowMotionCost);
+    if (await spendCoins(GameConstants.slowMotionCost)) {
+      _playerData.powerUpsUsedCount++;
+      // Update daily challenge for no power-ups
+      for (var challenge in _playerData.dailyChallenges) {
+        if (challenge.type == ChallengeType.noPowerUps && !challenge.isCompleted) {
+          challenge.currentProgress = 0;
+        }
+      }
+      await _savePlayerData();
+      notifyListeners();
+      return true;
+    }
+    return false;
   }
 
   /// Skip level
@@ -320,15 +376,13 @@ class GameProvider with ChangeNotifier {
 
   // ===== Themes & Achievements =====
 
-  /// Unlock theme
-  Future<bool> unlockTheme(int themeId, int cost) async {
-    if (_playerData.isThemeUnlocked(themeId)) return true;
-    if (!await spendCoins(cost)) return false;
-
+  /// Unlock theme (called by shop after spending currency)
+  Future<void> unlockTheme(int themeId) async {
+    if (_playerData.isThemeUnlocked(themeId)) return;
     _playerData.unlockTheme(themeId);
+    await _checkAndCompleteAchievements();
     await _savePlayerData();
     notifyListeners();
-    return true;
   }
 
   /// Set current theme
@@ -339,12 +393,84 @@ class GameProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Complete achievement
+  /// Complete achievement and award rewards
   Future<void> completeAchievement(int achievementId) async {
     if (_playerData.isAchievementCompleted(achievementId)) return;
+
+    final achievement = Achievement.getAchievementById(achievementId);
+    if (achievement == null) return;
+
     _playerData.completeAchievement(achievementId);
+
+    // Award rewards
+    if (achievement.coinReward > 0) {
+      _playerData.addCoins(achievement.coinReward);
+    }
+    if (achievement.gemReward > 0) {
+      _playerData.addGems(achievement.gemReward);
+    }
+
     await _savePlayerData();
     notifyListeners();
+  }
+
+  /// Check and complete achievements based on current progress
+  Future<void> _checkAndCompleteAchievements() async {
+    final achievements = Achievement.getAllAchievements();
+    bool anyCompleted = false;
+
+    for (final achievement in achievements) {
+      if (_playerData.isAchievementCompleted(achievement.id)) continue;
+
+      bool shouldComplete = false;
+
+      switch (achievement.type) {
+        case AchievementType.levelComplete:
+          shouldComplete = _playerData.totalLevelsCompleted >= achievement.targetValue;
+          break;
+        case AchievementType.worldComplete:
+          final currentWorld = (_playerData.currentLevel / 20).ceil();
+          shouldComplete = currentWorld >= achievement.targetValue;
+          break;
+        case AchievementType.perfectLevels:
+          shouldComplete = _playerData.perfectLevelsCount >= achievement.targetValue;
+          break;
+        case AchievementType.comboMultiplier:
+          shouldComplete = _playerData.consecutivePerfectLevels >= achievement.targetValue;
+          break;
+        case AchievementType.coinsCollected:
+          shouldComplete = _playerData.totalCoinsEarned >= achievement.targetValue;
+          break;
+        case AchievementType.themesUnlocked:
+          shouldComplete = _playerData.unlockedThemes.length >= achievement.targetValue;
+          break;
+        case AchievementType.powerUpsUsed:
+          shouldComplete = _playerData.powerUpsUsedCount >= achievement.targetValue;
+          break;
+        case AchievementType.highScore:
+          shouldComplete = _playerData.bestScore >= achievement.targetValue;
+          break;
+        case AchievementType.dailyChallenges:
+          shouldComplete = _playerData.dailyChallengesCompleted >= achievement.targetValue;
+          break;
+        case AchievementType.consecutiveDays:
+          shouldComplete = _playerData.consecutiveDaysPlayed >= achievement.targetValue;
+          break;
+        case AchievementType.speedRun:
+          // This is checked per-level, not automatically
+          break;
+      }
+
+      if (shouldComplete) {
+        await completeAchievement(achievement.id);
+        anyCompleted = true;
+        print('Achievement unlocked: ${achievement.title}');
+      }
+    }
+
+    if (anyCompleted) {
+      notifyListeners();
+    }
   }
 
   // ===== Daily Rewards =====
