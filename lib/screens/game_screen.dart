@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flame/game.dart';
+import 'package:confetti/confetti.dart';
+import 'dart:math';
 import '../game/sequence_rush_game.dart';
 import '../providers/game_provider.dart';
 import '../providers/settings_provider.dart';
@@ -26,6 +28,7 @@ class GameScreen extends StatefulWidget {
 
 class _GameScreenState extends State<GameScreen> {
   late SequenceRushGame _game;
+  late ConfettiController _confettiController;
   GamePhase _currentPhase = GamePhase.memorize;
   double _timeRemaining = 0;
   bool _isInitialized = false;
@@ -36,6 +39,7 @@ class _GameScreenState extends State<GameScreen> {
   @override
   void initState() {
     super.initState();
+    _confettiController = ConfettiController(duration: const Duration(seconds: 3));
     _initializeGame();
   }
 
@@ -113,6 +117,9 @@ class _GameScreenState extends State<GameScreen> {
       // Level complete
       audioService.playLevelCompleteSound();
       final score = await gameProvider.completeLevel();
+
+      // Trigger confetti celebration!
+      _confettiController.play();
 
       if (mounted) {
         _showLevelCompleteDialog(score, remainingTime);
@@ -429,6 +436,31 @@ class _GameScreenState extends State<GameScreen> {
             // Flame game
             GameWidget(game: _game),
 
+            // Confetti overlay
+            Align(
+              alignment: Alignment.topCenter,
+              child: ConfettiWidget(
+                confettiController: _confettiController,
+                blastDirection: pi / 2, // Downward
+                maxBlastForce: 20,
+                minBlastForce: 10,
+                emissionFrequency: 0.05,
+                numberOfParticles: 50,
+                gravity: 0.3,
+                shouldLoop: false,
+                colors: const [
+                  AppColors.red,
+                  AppColors.blue,
+                  AppColors.green,
+                  AppColors.yellow,
+                  AppColors.orange,
+                  AppColors.purple,
+                  AppColors.pink,
+                  AppColors.cyan,
+                ],
+              ),
+            ),
+
             // Top UI overlay
             Positioned(
               top: 0,
@@ -640,6 +672,7 @@ class _GameScreenState extends State<GameScreen> {
 
   @override
   void dispose() {
+    _confettiController.dispose();
     _game.pauseGame();
     super.dispose();
   }
