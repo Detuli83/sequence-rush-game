@@ -9,13 +9,19 @@ class PlayerData {
   int highestLevel;
   int totalScore;
   DateTime? lastLifeRegenTime;
+  DateTime lastLifeUpdate;
   int adForLifeCount;
   DateTime? lastAdForLifeDate;
   Map<String, bool> purchasedPowerUps;
   Map<String, int> powerUpCounts;
+  List<int> highScores;
+  List<int> unlockedThemes;
+  int currentTheme;
+  Set<int> completedAchievements;
   bool soundEnabled;
   bool musicEnabled;
   bool hapticsEnabled;
+  Map<String, bool> settings;
 
   PlayerData({
     this.coins = 0,
@@ -25,15 +31,30 @@ class PlayerData {
     this.highestLevel = 1,
     this.totalScore = 0,
     this.lastLifeRegenTime,
+    DateTime? lastLifeUpdate,
     this.adForLifeCount = 0,
     this.lastAdForLifeDate,
     Map<String, bool>? purchasedPowerUps,
     Map<String, int>? powerUpCounts,
+    List<int>? highScores,
+    List<int>? unlockedThemes,
+    this.currentTheme = 0,
+    Set<int>? completedAchievements,
     this.soundEnabled = true,
     this.musicEnabled = true,
     this.hapticsEnabled = true,
+    Map<String, bool>? settings,
   })  : purchasedPowerUps = purchasedPowerUps ?? {},
-        powerUpCounts = powerUpCounts ?? {};
+        powerUpCounts = powerUpCounts ?? {},
+        lastLifeUpdate = lastLifeUpdate ?? DateTime.now(),
+        highScores = highScores ?? [],
+        unlockedThemes = unlockedThemes ?? [0],
+        completedAchievements = completedAchievements ?? {},
+        settings = settings ?? {
+          'music': true,
+          'sfx': true,
+          'haptics': true,
+        };
 
   /// Add coins to the player's balance
   void addCoins(int amount) {
@@ -72,6 +93,12 @@ class PlayerData {
     lives = (lives + amount).clamp(0, GameConstants.maxLives);
   }
 
+  /// Add a single life
+  void addLife() {
+    lives++;
+    if (lives > GameConstants.maxLives) lives = GameConstants.maxLives;
+  }
+
   /// Remove a life
   bool removeLife() {
     if (lives > 0) {
@@ -79,6 +106,28 @@ class PlayerData {
       return true;
     }
     return false;
+  }
+
+  /// Lose a life (alias for removeLife)
+  void loseLife() {
+    if (lives > 0) lives--;
+  }
+
+  /// Update lives based on time elapsed
+  void updateLives() {
+    if (lives >= GameConstants.maxLives) {
+      lastLifeUpdate = DateTime.now();
+      return;
+    }
+
+    final now = DateTime.now();
+    final minutesElapsed = now.difference(lastLifeUpdate).inMinutes;
+    final livesToAdd = minutesElapsed ~/ GameConstants.lifeRegenerationMinutes;
+
+    if (livesToAdd > 0) {
+      lives = (lives + livesToAdd).clamp(0, GameConstants.maxLives);
+      lastLifeUpdate = now;
+    }
   }
 
   /// Check if lives need to be regenerated
@@ -161,13 +210,19 @@ class PlayerData {
       'highestLevel': highestLevel,
       'totalScore': totalScore,
       'lastLifeRegenTime': lastLifeRegenTime?.toIso8601String(),
+      'lastLifeUpdate': lastLifeUpdate.toIso8601String(),
       'adForLifeCount': adForLifeCount,
       'lastAdForLifeDate': lastAdForLifeDate?.toIso8601String(),
       'purchasedPowerUps': purchasedPowerUps,
       'powerUpCounts': powerUpCounts,
+      'highScores': highScores,
+      'unlockedThemes': unlockedThemes,
+      'currentTheme': currentTheme,
+      'completedAchievements': completedAchievements.toList(),
       'soundEnabled': soundEnabled,
       'musicEnabled': musicEnabled,
       'hapticsEnabled': hapticsEnabled,
+      'settings': settings,
     };
   }
 
@@ -183,6 +238,9 @@ class PlayerData {
       lastLifeRegenTime: json['lastLifeRegenTime'] != null
           ? DateTime.parse(json['lastLifeRegenTime'] as String)
           : null,
+      lastLifeUpdate: json['lastLifeUpdate'] != null
+          ? DateTime.parse(json['lastLifeUpdate'] as String)
+          : DateTime.now(),
       adForLifeCount: json['adForLifeCount'] as int? ?? 0,
       lastAdForLifeDate: json['lastAdForLifeDate'] != null
           ? DateTime.parse(json['lastAdForLifeDate'] as String)
@@ -191,9 +249,19 @@ class PlayerData {
           Map<String, bool>.from(json['purchasedPowerUps'] as Map? ?? {}),
       powerUpCounts:
           Map<String, int>.from(json['powerUpCounts'] as Map? ?? {}),
+      highScores: List<int>.from(json['highScores'] ?? []),
+      unlockedThemes: List<int>.from(json['unlockedThemes'] ?? [0]),
+      currentTheme: json['currentTheme'] ?? 0,
+      completedAchievements:
+          Set<int>.from(json['completedAchievements'] ?? []),
       soundEnabled: json['soundEnabled'] as bool? ?? true,
       musicEnabled: json['musicEnabled'] as bool? ?? true,
       hapticsEnabled: json['hapticsEnabled'] as bool? ?? true,
+      settings: Map<String, bool>.from(json['settings'] ?? {
+        'music': true,
+        'sfx': true,
+        'haptics': true,
+      }),
     );
   }
 
@@ -206,13 +274,19 @@ class PlayerData {
     int? highestLevel,
     int? totalScore,
     DateTime? lastLifeRegenTime,
+    DateTime? lastLifeUpdate,
     int? adForLifeCount,
     DateTime? lastAdForLifeDate,
     Map<String, bool>? purchasedPowerUps,
     Map<String, int>? powerUpCounts,
+    List<int>? highScores,
+    List<int>? unlockedThemes,
+    int? currentTheme,
+    Set<int>? completedAchievements,
     bool? soundEnabled,
     bool? musicEnabled,
     bool? hapticsEnabled,
+    Map<String, bool>? settings,
   }) {
     return PlayerData(
       coins: coins ?? this.coins,
@@ -222,13 +296,19 @@ class PlayerData {
       highestLevel: highestLevel ?? this.highestLevel,
       totalScore: totalScore ?? this.totalScore,
       lastLifeRegenTime: lastLifeRegenTime ?? this.lastLifeRegenTime,
+      lastLifeUpdate: lastLifeUpdate ?? this.lastLifeUpdate,
       adForLifeCount: adForLifeCount ?? this.adForLifeCount,
       lastAdForLifeDate: lastAdForLifeDate ?? this.lastAdForLifeDate,
       purchasedPowerUps: purchasedPowerUps ?? this.purchasedPowerUps,
       powerUpCounts: powerUpCounts ?? this.powerUpCounts,
+      highScores: highScores ?? this.highScores,
+      unlockedThemes: unlockedThemes ?? this.unlockedThemes,
+      currentTheme: currentTheme ?? this.currentTheme,
+      completedAchievements: completedAchievements ?? this.completedAchievements,
       soundEnabled: soundEnabled ?? this.soundEnabled,
       musicEnabled: musicEnabled ?? this.musicEnabled,
       hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
+      settings: settings ?? this.settings,
     );
   }
 }

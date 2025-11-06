@@ -14,11 +14,15 @@ class AdService {
   RewardedAd? _rewardedAd;
   BannerAd? _bannerAd;
 
+  bool _interstitialReady = false;
+  bool _rewardedReady = false;
+  int _gameOverCount = 0;
+
   DateTime? _lastInterstitialTime;
   int _levelsSinceLastInterstitial = 0;
 
   // Ad Unit IDs - Replace with your actual ad unit IDs
-  String get _bannerAdUnitId {
+  static String get _bannerAdUnitId {
     if (Platform.isAndroid) {
       return 'ca-app-pub-3940256099942544/6300978111'; // Test ID
     } else if (Platform.isIOS) {
@@ -27,7 +31,7 @@ class AdService {
     return '';
   }
 
-  String get _interstitialAdUnitId {
+  static String get interstitialAdUnitId {
     if (Platform.isAndroid) {
       return 'ca-app-pub-3940256099942544/1033173712'; // Test ID
     } else if (Platform.isIOS) {
@@ -36,7 +40,7 @@ class AdService {
     return '';
   }
 
-  String get _rewardedAdUnitId {
+  static String get rewardedAdUnitId {
     if (Platform.isAndroid) {
       return 'ca-app-pub-3940256099942544/5224354917'; // Test ID
     } else if (Platform.isIOS) {
@@ -64,6 +68,11 @@ class AdService {
     }
   }
 
+  /// Initialize the Mobile Ads SDK (alias for compatibility)
+  Future<void> init() async {
+    await initialize();
+  }
+
   /// Set whether ads have been removed via purchase
   void setAdsRemoved(bool removed) {
     _adsRemoved = removed;
@@ -74,6 +83,7 @@ class AdService {
       _interstitialAd = null;
       _bannerAd?.dispose();
       _bannerAd = null;
+      _interstitialReady = false;
       print('AdService: Ads removed');
     } else {
       // Pre-load ads
@@ -86,10 +96,10 @@ class AdService {
   bool get adsRemoved => _adsRemoved;
 
   /// Check if a rewarded ad is ready to show
-  bool get isRewardedAdReady => _rewardedAd != null;
+  bool get isRewardedAdReady => _rewardedReady && _rewardedAd != null;
 
   /// Check if an interstitial ad is ready to show
-  bool get isInterstitialAdReady => _interstitialAd != null;
+  bool get isInterstitialAdReady => _interstitialReady && _interstitialAd != null;
 
   // Banner Ads
 
@@ -130,11 +140,12 @@ class AdService {
     if (_adsRemoved || !_initialized) return;
 
     InterstitialAd.load(
-      adUnitId: _interstitialAdUnitId,
+      adUnitId: interstitialAdUnitId,
       request: const AdRequest(),
       adLoadCallback: InterstitialAdLoadCallback(
         onAdLoaded: (ad) {
           _interstitialAd = ad;
+          _interstitialReady = true;
           print('AdService: Interstitial ad loaded');
 
           _interstitialAd!.fullScreenContentCallback =
@@ -142,12 +153,14 @@ class AdService {
             onAdDismissedFullScreenContent: (ad) {
               ad.dispose();
               _interstitialAd = null;
+              _interstitialReady = false;
               _loadInterstitialAd(); // Pre-load next ad
             },
             onAdFailedToShowFullScreenContent: (ad, error) {
               print('AdService: Interstitial ad failed to show: $error');
               ad.dispose();
               _interstitialAd = null;
+              _interstitialReady = false;
               _loadInterstitialAd(); // Pre-load next ad
             },
           );
@@ -155,6 +168,7 @@ class AdService {
         onAdFailedToLoad: (error) {
           print('AdService: Interstitial ad failed to load: $error');
           _interstitialAd = null;
+          _interstitialReady = false;
         },
       ),
     );
@@ -162,7 +176,7 @@ class AdService {
 
   /// Show an interstitial ad
   Future<bool> showInterstitialAd() async {
-    if (_adsRemoved || !_initialized || _interstitialAd == null) {
+    if (_adsRemoved || !_initialized || _interstitialAd == null || !_interstitialReady) {
       return false;
     }
 
@@ -179,10 +193,25 @@ class AdService {
       await _interstitialAd!.show();
       _lastInterstitialTime = DateTime.now();
       _levelsSinceLastInterstitial = 0;
+      _interstitialReady = false;
       return true;
     } catch (e) {
       print('AdService: Error showing interstitial ad: $e');
       return false;
+    }
+  }
+
+  /// Show interstitial ad based on game over count
+  Future<void> showInterstitialAdOnGameOver() async {
+    _gameOverCount++;
+
+    // Show ad every N game overs
+    if (_gameOverCount % GameConstants.gameOversBetweenInterstitial != 0) return;
+
+    if (_interstitialReady && _interstitialAd != null) {
+      await _interstitialAd!.show();
+      _interstitialReady = false;
+      _loadInterstitialAd(); // Reload for next time
     }
   }
 
@@ -206,23 +235,26 @@ class AdService {
     if (!_initialized) return; // Note: Rewarded ads are shown even if ads are removed
 
     RewardedAd.load(
-      adUnitId: _rewardedAdUnitId,
+      adUnitId: rewardedAdUnitId,
       request: const AdRequest(),
       rewardedAdLoadCallback: RewardedAdLoadCallback(
         onAdLoaded: (ad) {
           _rewardedAd = ad;
+          _rewardedReady = true;
           print('AdService: Rewarded ad loaded');
 
           _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
             onAdDismissedFullScreenContent: (ad) {
               ad.dispose();
               _rewardedAd = null;
+              _rewardedReady = false;
               _loadRewardedAd(); // Pre-load next ad
             },
             onAdFailedToShowFullScreenContent: (ad, error) {
               print('AdService: Rewarded ad failed to show: $error');
               ad.dispose();
               _rewardedAd = null;
+              _rewardedReady = false;
               _loadRewardedAd(); // Pre-load next ad
             },
           );
@@ -230,17 +262,18 @@ class AdService {
         onAdFailedToLoad: (error) {
           print('AdService: Rewarded ad failed to load: $error');
           _rewardedAd = null;
+          _rewardedReady = false;
         },
       ),
     );
   }
 
-  /// Show a rewarded ad
+  /// Show a rewarded ad with callback
   Future<bool> showRewardedAd({
     required Function() onRewarded,
     Function()? onAdDismissed,
   }) async {
-    if (!_initialized || _rewardedAd == null) {
+    if (!_initialized || _rewardedAd == null || !_rewardedReady) {
       return false;
     }
 
@@ -259,11 +292,39 @@ class AdService {
         onAdDismissed();
       }
 
+      _rewardedReady = false;
       return rewarded;
     } catch (e) {
       print('AdService: Error showing rewarded ad: $e');
       return false;
     }
+  }
+
+  /// Show a rewarded ad with simple callback (alternate signature for compatibility)
+  Future<bool> showRewardedAdAlt(Function onRewardEarned) async {
+    if (!_initialized || _rewardedAd == null || !_rewardedReady) {
+      return false;
+    }
+
+    bool rewarded = false;
+
+    _rewardedAd!.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (ad) {
+        ad.dispose();
+        _rewardedReady = false;
+        _loadRewardedAd();
+      },
+    );
+
+    await _rewardedAd!.show(
+      onUserEarnedReward: (ad, reward) {
+        rewarded = true;
+        onRewardEarned();
+      },
+    );
+
+    _rewardedReady = false;
+    return rewarded;
   }
 
   /// Dispose all ads
@@ -274,5 +335,7 @@ class AdService {
     _rewardedAd = null;
     _bannerAd?.dispose();
     _bannerAd = null;
+    _interstitialReady = false;
+    _rewardedReady = false;
   }
 }

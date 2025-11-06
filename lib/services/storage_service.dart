@@ -16,6 +16,11 @@ class StorageService {
     _prefs = await SharedPreferences.getInstance();
   }
 
+  /// Initialize the storage service (alias for compatibility)
+  Future<void> init() async {
+    await initialize();
+  }
+
   /// Ensure preferences are initialized
   Future<SharedPreferences> get _preferences async {
     _prefs ??= await SharedPreferences.getInstance();
@@ -32,7 +37,7 @@ class StorageService {
   }
 
   /// Load player data
-  Future<PlayerData?> loadPlayerData() async {
+  Future<PlayerData> loadPlayerData() async {
     final prefs = await _preferences;
     final jsonString = prefs.getString(GameConstants.keyPlayerData);
 
@@ -42,11 +47,11 @@ class StorageService {
         return PlayerData.fromJson(jsonMap);
       } catch (e) {
         print('Error loading player data: $e');
-        return null;
+        return PlayerData();
       }
     }
 
-    return null;
+    return PlayerData();
   }
 
   /// Delete player data (for reset/logout)
@@ -86,7 +91,39 @@ class StorageService {
     await prefs.setStringList(GameConstants.keyPurchases, purchases.toList());
   }
 
+  // High Scores
+
+  /// Get high scores
+  Future<List<int>> getHighScores() async {
+    final data = await loadPlayerData();
+    return data.highScores;
+  }
+
+  /// Add high score
+  Future<void> addHighScore(int score) async {
+    final data = await loadPlayerData();
+    data.highScores.add(score);
+    data.highScores.sort((a, b) => b.compareTo(a)); // Sort descending
+    if (data.highScores.length > 10) {
+      data.highScores = data.highScores.take(10).toList();
+    }
+    await savePlayerData(data);
+  }
+
   // Settings Management
+
+  /// Get a setting
+  Future<bool> getSetting(String key, {bool defaultValue = true}) async {
+    final data = await loadPlayerData();
+    return data.settings[key] ?? defaultValue;
+  }
+
+  /// Set a setting
+  Future<void> setSetting(String key, bool value) async {
+    final data = await loadPlayerData();
+    data.settings[key] = value;
+    await savePlayerData(data);
+  }
 
   /// Save a boolean setting
   Future<void> saveBoolSetting(String key, bool value) async {
