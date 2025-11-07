@@ -1,35 +1,9 @@
 import 'package:flutter/material.dart';
 
-/// App color constants
+/// Color constants for Sequence Rush game
+/// Based on GDD Section 4.2
 class AppColors {
-  AppColors._(); // Private constructor to prevent instantiation
-
-  // Brand colors
-  static const Color primary = Color(0xFF6C63FF);
-  static const Color secondary = Color(0xFFFF6584);
-  static const Color accent = Color(0xFF00D9FF);
-
-  // Currency colors (required by currency_display.dart)
-  static const Color coin = Color(0xFFFFD700); // Gold color for coins
-  static const Color gem = Color(0xFF00BFFF);  // Diamond blue for gems
-
-  // Background colors
-  static const Color background = Color(0xFF1A1A2E);
-  static const Color backgroundLight = Color(0xFF16213E);
-  static const Color backgroundDark = Color(0xFF0F0F1E);
-
-  // UI colors
-  static const Color success = Color(0xFF4CAF50);
-  static const Color warning = Color(0xFFFF9800);
-  static const Color error = Color(0xFFFF5252);
-  static const Color info = Color(0xFF2196F3);
-
-  // Text colors
-  static const Color textPrimary = Color(0xFFFFFFFF);
-  static const Color textSecondary = Color(0xFFB8B8B8);
-  static const Color textDisabled = Color(0xFF757575);
-
-  // Game button colors (8 colors for the memory game)
+  // Game button colors (8 colors for different worlds)
   static const Color red = Color(0xFFFF3B30);
   static const Color blue = Color(0xFF007AFF);
   static const Color green = Color(0xFF34C759);
@@ -38,16 +12,6 @@ class AppColors {
   static const Color purple = Color(0xFFAF52DE);
   static const Color pink = Color(0xFFFF2D55);
   static const Color cyan = Color(0xFF5AC8FA);
-
-  // Legacy button colors (for backward compatibility)
-  static const Color buttonRed = red;
-  static const Color buttonBlue = blue;
-  static const Color buttonGreen = green;
-  static const Color buttonYellow = yellow;
-  static const Color buttonOrange = orange;
-  static const Color buttonPurple = purple;
-  static const Color buttonPink = pink;
-  static const Color buttonTeal = cyan;
 
   // UI colors - Light theme
   static const Color lightBgPrimary = Color(0xFFFFFFFF);
@@ -61,14 +25,28 @@ class AppColors {
   static const Color darkTextPrimary = Color(0xFFFFFFFF);
   static const Color darkTextSecondary = Color(0xFFEBEBF5);
 
-  // Additional UI colors
-  static const Color cardBackground = Color(0xFF2A2A3E);
-  static const Color divider = Color(0xFF3A3A4E);
-  static const Color overlay = Color(0x80000000);
+  // Semantic colors
+  static const Color accent = blue;
+  static const Color success = green;
+  static const Color warning = orange;
+  static const Color error = red;
 
-  // Get button colors list
+  /// Get list of button colors based on color count
+  /// World 1 (4 colors), World 2 (6 colors), World 3+ (8 colors)
   static List<Color> getButtonColors(int count) {
     const colors = [red, blue, green, yellow, orange, purple, pink, cyan];
     return colors.take(count).toList();
+  }
+
+  /// Get color by index
+  static Color getColorByIndex(int index) {
+    const colors = [red, blue, green, yellow, orange, purple, pink, cyan];
+    return colors[index % colors.length];
+  }
+
+  /// Get color name by index (for accessibility and debugging)
+  static String getColorName(int index) {
+    const names = ['Red', 'Blue', 'Green', 'Yellow', 'Orange', 'Purple', 'Pink', 'Cyan'];
+    return names[index % names.length];
   }
 }

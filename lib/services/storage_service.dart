@@ -1,245 +1,175 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sequence_rush_game/config/constants.dart';
-import 'package:sequence_rush_game/models/player_data.dart';
+import '../models/player_data.dart';
+import '../config/constants.dart';
 
-/// Service for managing local storage using SharedPreferences
+/// Service for local data persistence using SharedPreferences
+/// Based on GDD Section 6.2 - Data Storage
 class StorageService {
-  static final StorageService _instance = StorageService._internal();
-  factory StorageService() => _instance;
-  StorageService._internal();
-
   SharedPreferences? _prefs;
 
   /// Initialize the storage service
-  Future<void> initialize() async {
+  Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
   }
 
-  /// Initialize the storage service (alias for compatibility)
-  Future<void> init() async {
-    await initialize();
-  }
-
   /// Ensure preferences are initialized
-  Future<SharedPreferences> get _preferences async {
-    _prefs ??= await SharedPreferences.getInstance();
-    return _prefs!;
+  void _ensureInitialized() {
+    if (_prefs == null) {
+      throw Exception('StorageService not initialized. Call init() first.');
+    }
   }
 
-  // Player Data Management
+  // ===== Player Data =====
 
-  /// Save player data
-  Future<void> savePlayerData(PlayerData playerData) async {
-    final prefs = await _preferences;
-    final jsonString = jsonEncode(playerData.toJson());
-    await prefs.setString(GameConstants.keyPlayerData, jsonString);
-  }
-
-  /// Load player data
+  /// Load player data from storage
   Future<PlayerData> loadPlayerData() async {
-    final prefs = await _preferences;
-    final jsonString = prefs.getString(GameConstants.keyPlayerData);
+    _ensureInitialized();
+    final jsonString = _prefs!.getString(StorageKeys.playerData);
 
-    if (jsonString != null) {
-      try {
-        final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
-        return PlayerData.fromJson(jsonMap);
-      } catch (e) {
-        print('Error loading player data: $e');
-        return PlayerData();
-      }
+    if (jsonString == null || jsonString.isEmpty) {
+      // Return new player data if no saved data exists
+      return PlayerData();
     }
 
-    return PlayerData();
+    try {
+      final json = jsonDecode(jsonString) as Map<String, dynamic>;
+      return PlayerData.fromJson(json);
+    } catch (e) {
+      // If there's an error parsing, return new player data
+      print('Error loading player data: $e');
+      return PlayerData();
+    }
   }
 
-  /// Delete player data (for reset/logout)
-  Future<void> deletePlayerData() async {
-    final prefs = await _preferences;
-    await prefs.remove(GameConstants.keyPlayerData);
+  /// Save player data to storage
+  Future<bool> savePlayerData(PlayerData data) async {
+    _ensureInitialized();
+    try {
+      final jsonString = jsonEncode(data.toJson());
+      return await _prefs!.setString(StorageKeys.playerData, jsonString);
+    } catch (e) {
+      print('Error saving player data: $e');
+      return false;
+    }
   }
 
-  // Purchase Management
+  // ===== High Scores =====
 
-  /// Save a purchased item
-  Future<void> savePurchasedItem(String productId) async {
-    final prefs = await _preferences;
-    final purchases = await getPurchasedItems();
-    purchases.add(productId);
-    await prefs.setStringList(GameConstants.keyPurchases, purchases.toList());
-  }
-
-  /// Check if an item is purchased
-  Future<bool> isPurchased(String productId) async {
-    final purchases = await getPurchasedItems();
-    return purchases.contains(productId);
-  }
-
-  /// Get all purchased items
-  Future<Set<String>> getPurchasedItems() async {
-    final prefs = await _preferences;
-    final purchasesList = prefs.getStringList(GameConstants.keyPurchases) ?? [];
-    return purchasesList.toSet();
-  }
-
-  /// Remove a purchased item (for testing/refunds)
-  Future<void> removePurchasedItem(String productId) async {
-    final prefs = await _preferences;
-    final purchases = await getPurchasedItems();
-    purchases.remove(productId);
-    await prefs.setStringList(GameConstants.keyPurchases, purchases.toList());
-  }
-
-  // High Scores
-
-  /// Get high scores
+  /// Get all high scores
   Future<List<int>> getHighScores() async {
     final data = await loadPlayerData();
     return data.highScores;
   }
 
-  /// Add high score
+  /// Add a new high score
   Future<void> addHighScore(int score) async {
     final data = await loadPlayerData();
-    data.highScores.add(score);
-    data.highScores.sort((a, b) => b.compareTo(a)); // Sort descending
-    if (data.highScores.length > 10) {
-      data.highScores = data.highScores.take(10).toList();
-    }
+    data.addHighScore(score);
     await savePlayerData(data);
   }
 
-  // Settings Management
+  // ===== Settings =====
 
-  /// Get a setting
-  Future<bool> getSetting(String key, {bool defaultValue = true}) async {
-    final data = await loadPlayerData();
-    return data.settings[key] ?? defaultValue;
+  /// Get music enabled setting
+  Future<bool> getMusicEnabled() async {
+    _ensureInitialized();
+    return _prefs!.getBool(StorageKeys.musicEnabled) ?? true;
   }
 
-  /// Set a setting
-  Future<void> setSetting(String key, bool value) async {
-    final data = await loadPlayerData();
-    data.settings[key] = value;
-    await savePlayerData(data);
+  /// Set music enabled setting
+  Future<bool> setMusicEnabled(bool enabled) async {
+    _ensureInitialized();
+    return await _prefs!.setBool(StorageKeys.musicEnabled, enabled);
   }
 
-  /// Save a boolean setting
-  Future<void> saveBoolSetting(String key, bool value) async {
-    final prefs = await _preferences;
-    await prefs.setBool(key, value);
+  /// Get SFX enabled setting
+  Future<bool> getSfxEnabled() async {
+    _ensureInitialized();
+    return _prefs!.getBool(StorageKeys.sfxEnabled) ?? true;
   }
 
-  /// Load a boolean setting
-  Future<bool> loadBoolSetting(String key, {bool defaultValue = true}) async {
-    final prefs = await _preferences;
-    return prefs.getBool(key) ?? defaultValue;
+  /// Set SFX enabled setting
+  Future<bool> setSfxEnabled(bool enabled) async {
+    _ensureInitialized();
+    return await _prefs!.setBool(StorageKeys.sfxEnabled, enabled);
   }
 
-  /// Save an integer setting
-  Future<void> saveIntSetting(String key, int value) async {
-    final prefs = await _preferences;
-    await prefs.setInt(key, value);
+  /// Get haptics enabled setting
+  Future<bool> getHapticsEnabled() async {
+    _ensureInitialized();
+    return _prefs!.getBool(StorageKeys.hapticsEnabled) ?? true;
   }
 
-  /// Load an integer setting
-  Future<int> loadIntSetting(String key, {int defaultValue = 0}) async {
-    final prefs = await _preferences;
-    return prefs.getInt(key) ?? defaultValue;
+  /// Set haptics enabled setting
+  Future<bool> setHapticsEnabled(bool enabled) async {
+    _ensureInitialized();
+    return await _prefs!.setBool(StorageKeys.hapticsEnabled, enabled);
   }
 
-  /// Save a string setting
-  Future<void> saveStringSetting(String key, String value) async {
-    final prefs = await _preferences;
-    await prefs.setString(key, value);
+  /// Get dark mode setting
+  Future<bool> getIsDarkMode() async {
+    _ensureInitialized();
+    return _prefs!.getBool(StorageKeys.isDarkMode) ?? false;
   }
 
-  /// Load a string setting
-  Future<String?> loadStringSetting(String key) async {
-    final prefs = await _preferences;
-    return prefs.getString(key);
+  /// Set dark mode setting
+  Future<bool> setIsDarkMode(bool enabled) async {
+    _ensureInitialized();
+    return await _prefs!.setBool(StorageKeys.isDarkMode, enabled);
   }
 
-  // Ad Management
+  // ===== Utility Methods =====
 
-  /// Save the last ad date
-  Future<void> saveLastAdDate(DateTime date) async {
-    final prefs = await _preferences;
-    await prefs.setString(GameConstants.keyLastAdDate, date.toIso8601String());
+  /// Clear all stored data (for debugging/testing)
+  Future<bool> clearAll() async {
+    _ensureInitialized();
+    return await _prefs!.clear();
   }
 
-  /// Get the last ad date
-  Future<DateTime?> getLastAdDate() async {
-    final prefs = await _preferences;
-    final dateString = prefs.getString(GameConstants.keyLastAdDate);
-    if (dateString != null) {
-      try {
-        return DateTime.parse(dateString);
-      } catch (e) {
-        print('Error parsing last ad date: $e');
-        return null;
+  /// Reset player progress (but keep settings)
+  Future<bool> resetProgress() async {
+    _ensureInitialized();
+    final newData = PlayerData();
+    return await savePlayerData(newData);
+  }
+
+  /// Check if player has saved data
+  Future<bool> hasSavedData() async {
+    _ensureInitialized();
+    return _prefs!.containsKey(StorageKeys.playerData);
+  }
+
+  /// Get storage size estimate (in bytes)
+  Future<int> getStorageSize() async {
+    _ensureInitialized();
+    int totalSize = 0;
+    for (final key in _prefs!.getKeys()) {
+      final value = _prefs!.get(key);
+      if (value is String) {
+        totalSize += value.length;
+      } else {
+        totalSize += value.toString().length;
       }
     }
-    return null;
+    return totalSize;
   }
 
-  /// Save ad for life count
-  Future<void> saveAdForLifeCount(int count) async {
-    final prefs = await _preferences;
-    await prefs.setInt(GameConstants.keyAdForLifeCount, count);
+  /// Export player data as JSON string (for backup)
+  Future<String> exportPlayerData() async {
+    final data = await loadPlayerData();
+    return jsonEncode(data.toJson());
   }
 
-  /// Get ad for life count
-  Future<int> getAdForLifeCount() async {
-    final prefs = await _preferences;
-    return prefs.getInt(GameConstants.keyAdForLifeCount) ?? 0;
-  }
-
-  // Achievement Management
-
-  /// Save achievements
-  Future<void> saveAchievements(Map<String, bool> achievements) async {
-    final prefs = await _preferences;
-    final jsonString = jsonEncode(achievements);
-    await prefs.setString(GameConstants.keyAchievements, jsonString);
-  }
-
-  /// Load achievements
-  Future<Map<String, bool>> loadAchievements() async {
-    final prefs = await _preferences;
-    final jsonString = prefs.getString(GameConstants.keyAchievements);
-
-    if (jsonString != null) {
-      try {
-        final jsonMap = jsonDecode(jsonString) as Map<String, dynamic>;
-        return jsonMap.map((key, value) => MapEntry(key, value as bool));
-      } catch (e) {
-        print('Error loading achievements: $e');
-        return {};
-      }
+  /// Import player data from JSON string (for restore)
+  Future<bool> importPlayerData(String jsonString) async {
+    try {
+      final json = jsonDecode(jsonString) as Map<String, dynamic>;
+      final data = PlayerData.fromJson(json);
+      return await savePlayerData(data);
+    } catch (e) {
+      print('Error importing player data: $e');
+      return false;
     }
-
-    return {};
-  }
-
-  // Utility Methods
-
-  /// Clear all stored data (for testing or reset)
-  Future<void> clearAll() async {
-    final prefs = await _preferences;
-    await prefs.clear();
-  }
-
-  /// Check if any data exists
-  Future<bool> hasData() async {
-    final prefs = await _preferences;
-    return prefs.getKeys().isNotEmpty;
-  }
-
-  /// Get all keys
-  Future<Set<String>> getAllKeys() async {
-    final prefs = await _preferences;
-    return prefs.getKeys();
   }
 }

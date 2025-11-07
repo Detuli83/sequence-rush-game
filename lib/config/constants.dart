@@ -1,87 +1,89 @@
-/// Game configuration constants
+/// Game constants from GDD
 class GameConstants {
-  GameConstants._(); // Private constructor to prevent instantiation
-
-  // Lives system
+  // Lives system (Section 3.1)
   static const int maxLives = 5;
-  static const int livesRegenTime = 30 * 60; // 30 minutes in seconds
   static const int lifeRegenerationMinutes = 15;
-  static const int adForLifeLimit = 3; // Max ads for lives per day
 
-  // Currency rewards
-  static const int coinsPerLevel = 10;
-  static const int baseCoinsPerLevel = 10;
-  static const int coinsForPerfectLevel = 25;
-  static const int perfectLevelCoinBonus = 25;
-  static const int coinsPerAd = 20;
-  static const int adRewardCoins = 25;
-  static const int dailyLoginBonus = 50;
-
-  // Time bonus multiplier (coins per second remaining)
-  static const double timeBonus = 0.5;
-
-  // Power-ups costs
-  static const int hintCost = 50;
-  static const int slowTimeCost = 50;
-  static const int skipLevelCost = 100;
-  static const int extraLifeCost = 30;
-  static const int extraTimeCost = 75;
-  static const int slowMotionCost = 100;
-  static const int doubleRewardCost = 75;
-  static const int skipLevelCostAlt = 200;
-
-  // Game timing
-  static const int baseMemorizeTime = 3000; // milliseconds
-  static const int baseExecuteTime = 5000; // milliseconds
-  static const int minMemorizeTime = 1000; // milliseconds
-  static const int minExecuteTime = 2000; // milliseconds
-  static const double defaultMemorizeTime = 3.0; // seconds
-  static const double defaultExecuteTime = 15.0; // seconds
-
-  // Sequence difficulty
-  static const int startingSequenceLength = 3;
-  static const int maxSequenceLength = 15;
-  static const int numberOfColors = 8;
-
-  // IAP prices (in USD cents)
-  static const int removeAdsCost = 299; // $2.99
-  static const int starterPackCost = 99; // $0.99
-  static const int megaPackCost = 999; // $9.99
-
-  // Ad timing
-  static const int minSecondsBetweenInterstitials = 180; // 3 minutes
-  static const int levelsPerInterstitial = 3;
-  static const int gameOversBetweenInterstitial = 3;
-  static const int maxRewardedAdsPerDay = 3;
-
-  // Daily rewards
-  static const List<int> dailyRewardCoins = [10, 20, 30, 50, 100, 150, 200];
-
-  // Progression
-  static const double difficultyIncreaseRate = 0.95; // Time multiplier per level
-  static const int levelsPerDifficultyIncrease = 5;
-
-  // Scoring
+  // Scoring system (Section 2.4)
   static const int pointsPerSequenceStep = 100;
-  static const int pointsPerSecondRemaining = 50;
+  static const int pointsPerSecond = 50;
   static const int perfectLevelBonus = 500;
 
-  // Combo system
-  static const int combo3Multiplier = 150; // 1.5x as int percentage
-  static const int combo5Multiplier = 200; // 2x
-  static const int combo10Multiplier = 300; // 3x
+  // Combo multipliers (Section 2.4)
+  static const int comboLevel1 = 3; // 1.5x multiplier
+  static const int comboLevel2 = 5; // 2x multiplier
+  static const int comboLevel3 = 10; // 3x multiplier
 
-  // UI constants
+  // Currency rewards (Section 3.3)
+  static const int coinsPerLevel = 10;
+  static const int coinsPerPerfect = 25;
+  static const int coinsDailyBonus = 50;
+  static const int coinsPerAd = 25;
+
+  // Power-up costs (Section 3.2)
+  static const int hintCost = 50;
+  static const int extraTimeCost = 75;
+  static const int slowMotionCost = 100;
+  static const int skipLevelCost = 200;
+
+  // Power-up effects
+  static const double extraTimeSeconds = 5.0;
+  static const double slowMotionMultiplier = 0.5;
+
+  // Ad configuration (Section 7.1)
+  static const int adFrequencyGameOvers = 3; // Show ad every 3 game overs
+  static const int maxRewardedAdsPerDay = 3;
+
+  // World configuration (Section 2.2)
+  static const int world1MaxLevel = 20;
+  static const int world2MaxLevel = 40;
+  static const int world3MaxLevel = 60;
+
+  // Animation durations (Section 4.4)
+  static const int buttonPressDurationMs = 100;
+  static const int sequenceHighlightDurationMs = 300;
+  static const int successAnimationDurationMs = 1500;
+  static const int failureAnimationDurationMs = 800;
+
+  // Game timing
+  static const double defaultMemorizeTime = 5.0;
+  static const double defaultExecuteTime = 15.0;
+
+  // UI sizing
   static const double buttonSize = 80.0;
-  static const double buttonSpacing = 12.0;
-  static const int animationDuration = 300; // milliseconds
-  static const int feedbackDuration = 500; // milliseconds
+  static const double buttonSpacing = 16.0;
+  static const double buttonBorderRadius = 12.0;
 
-  // Storage keys
-  static const String keyPlayerData = 'player_data';
-  static const String keySettings = 'settings';
-  static const String keyPurchases = 'purchases';
-  static const String keyAchievements = 'achievements';
-  static const String keyLastAdDate = 'last_ad_date';
-  static const String keyAdForLifeCount = 'ad_for_life_count';
+  // Performance targets (Section 6.3)
+  static const int targetFps = 60;
+  static const int maxLoadTimeSeconds = 2;
+}
+
+/// Ad unit IDs
+class AdUnitIds {
+  // Test IDs - Replace with real IDs for production
+  static const String androidInterstitial = 'ca-app-pub-3940256099942544/1033173712';
+  static const String iosInterstitial = 'ca-app-pub-3940256099942544/4411468910';
+  static const String androidRewarded = 'ca-app-pub-3940256099942544/5224354917';
+  static const String iosRewarded = 'ca-app-pub-3940256099942544/1712485313';
+  static const String androidBanner = 'ca-app-pub-3940256099942544/6300978111';
+  static const String iosBanner = 'ca-app-pub-3940256099942544/2934735716';
+}
+
+/// Storage keys for SharedPreferences
+class StorageKeys {
+  static const String playerData = 'player_data';
+  static const String currentLevel = 'current_level';
+  static const String lives = 'lives';
+  static const String coins = 'coins';
+  static const String gems = 'gems';
+  static const String lastLifeUpdate = 'last_life_update';
+  static const String highScores = 'high_scores';
+  static const String unlockedThemes = 'unlocked_themes';
+  static const String currentTheme = 'current_theme';
+  static const String achievements = 'achievements';
+  static const String musicEnabled = 'music_enabled';
+  static const String sfxEnabled = 'sfx_enabled';
+  static const String hapticsEnabled = 'haptics_enabled';
+  static const String isDarkMode = 'is_dark_mode';
 }

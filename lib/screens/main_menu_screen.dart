@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/game_provider.dart';
-import '../widgets/custom_button.dart';
+import '../providers/settings_provider.dart';
+import '../config/colors.dart';
 import 'game_screen.dart';
+import 'shop_screen.dart';
+import 'achievements_screen.dart';
+import 'settings_screen.dart';
 
+/// Main menu screen
+/// Entry point of the game showing player stats and navigation
 class MainMenuScreen extends StatelessWidget {
   const MainMenuScreen({super.key});
 
@@ -11,118 +17,189 @@ class MainMenuScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Consumer<GameProvider>(
-          builder: (context, gameProvider, _) {
+        child: Consumer2<GameProvider, SettingsProvider>(
+          builder: (context, gameProvider, settings, _) {
+            // Show loading indicator while data loads
+            if (!gameProvider.isLoaded) {
+              return const Center(
+                child: CircularProgressIndicator(),
+              );
+            }
+
             return Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Theme.of(context).scaffoldBackgroundColor,
-                    Theme.of(context).primaryColor.withOpacity(0.1),
-                  ],
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Spacer(),
-                    // Logo
-                    Text(
-                      'SEQUENCE',
-                      style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                            fontSize: 48,
-                            letterSpacing: 4,
-                          ),
-                      textAlign: TextAlign.center,
-                    ),
-                    Text(
-                      'RUSH',
-                      style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                            fontSize: 48,
-                            letterSpacing: 4,
-                          ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Memory + Reflex Challenge',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            letterSpacing: 2,
-                          ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 60),
-
-                    // Play button
-                    CustomButton(
-                      text: 'PLAY NOW',
-                      onPressed: () {
-                        if (gameProvider.lives > 0) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => GameScreen(
-                                levelNumber: gameProvider.currentLevelNumber,
-                              ),
-                            ),
-                          );
-                        } else {
-                          _showNoLivesDialog(context);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 40),
-
-                    // Stats
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).primaryColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(16),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Header with settings
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildHeaderStat(
+                        context,
+                        Icons.favorite,
+                        '${gameProvider.lives}',
+                        AppColors.error,
                       ),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            children: [
-                              _buildStat(
-                                context,
-                                'Level',
-                                '${gameProvider.currentLevelNumber}',
-                              ),
-                              _buildStat(
-                                context,
-                                'Lives',
-                                '♥' * gameProvider.lives,
-                              ),
-                            ],
+                      _buildHeaderStat(
+                        context,
+                        Icons.monetization_on,
+                        '${gameProvider.coins}',
+                        AppColors.yellow,
+                      ),
+                      _buildHeaderStat(
+                        context,
+                        Icons.diamond,
+                        '${gameProvider.gems}',
+                        AppColors.cyan,
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          settings.isDarkMode ? Icons.light_mode : Icons.dark_mode,
+                        ),
+                        onPressed: () => settings.toggleDarkMode(),
+                      ),
+                    ],
+                  ),
+
+                  // Logo/Title
+                  Column(
+                    children: [
+                      Text(
+                        'SEQUENCE',
+                        style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                              fontSize: 48,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 2,
+                            ),
+                      ),
+                      Text(
+                        'RUSH',
+                        style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                              fontSize: 48,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.accent,
+                              letterSpacing: 2,
+                            ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Memory + Reflex Game',
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              color: Theme.of(context).textTheme.bodySmall?.color,
+                            ),
+                      ),
+                    ],
+                  ),
+
+                  // Main actions
+                  Column(
+                    children: [
+                      // Play button
+                      ElevatedButton(
+                        onPressed: gameProvider.hasLives
+                            ? () {
+                                // Navigate to game screen
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => GameScreen(
+                                      levelNumber: gameProvider.currentLevel,
+                                    ),
+                                  ),
+                                );
+                              }
+                            : null,
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 56),
+                        ),
+                        child: Text(
+                          gameProvider.hasLives
+                              ? 'PLAY NOW'
+                              : 'NO LIVES - WAIT OR WATCH AD',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
                           ),
-                          const SizedBox(height: 16),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                            children: [
-                              _buildStat(
-                                context,
-                                'Coins',
-                                '${gameProvider.coins}',
-                              ),
-                              _buildStat(
-                                context,
-                                'Gems',
-                                '${gameProvider.gems}',
-                              ),
-                            ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Level info
+                      Text(
+                        'LEVEL ${gameProvider.currentLevel}',
+                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                              color: AppColors.accent,
+                              fontWeight: FontWeight.bold,
+                            ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      // Stats row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildStat(
+                            context,
+                            'BEST SCORE',
+                            '${gameProvider.bestScore}',
+                          ),
+                          _buildStat(
+                            context,
+                            'PERFECT STREAK',
+                            '${gameProvider.consecutivePerfectLevels}',
                           ),
                         ],
                       ),
-                    ),
-                    const Spacer(),
-                  ],
-                ),
+                    ],
+                  ),
+
+                  // Bottom navigation
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _buildNavButton(
+                        context,
+                        Icons.emoji_events,
+                        'Achievements',
+                        () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const AchievementsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _buildNavButton(
+                        context,
+                        Icons.shopping_bag,
+                        'Shop',
+                        () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ShopScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _buildNavButton(
+                        context,
+                        Icons.settings,
+                        'Settings',
+                        () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const SettingsScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ],
               ),
             );
           },
@@ -131,19 +208,19 @@ class MainMenuScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStat(BuildContext context, String label, String value) {
-    return Column(
+  Widget _buildHeaderStat(
+    BuildContext context,
+    IconData icon,
+    String value,
+    Color color,
+  ) {
+    return Row(
       children: [
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Colors.grey,
-              ),
-        ),
-        const SizedBox(height: 4),
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: 4),
         Text(
           value,
-          style: Theme.of(context).textTheme.displaySmall?.copyWith(
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
         ),
@@ -151,20 +228,46 @@ class MainMenuScreen extends StatelessWidget {
     );
   }
 
-  void _showNoLivesDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('No Lives Left'),
-        content: const Text(
-          'You need lives to play. Lives regenerate every 15 minutes, or you can watch an ad to get one now!',
+  Widget _buildStat(BuildContext context, String label, String value) {
+    return Column(
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: AppColors.accent,
+              ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNavButton(
+    BuildContext context,
+    IconData icon,
+    String label,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Icon(icon, size: 32, color: AppColors.accent),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
       ),
     );
   }

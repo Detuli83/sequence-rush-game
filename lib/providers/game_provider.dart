@@ -1,365 +1,513 @@
 import 'package:flutter/foundation.dart';
 import '../models/player_data.dart';
 import '../models/level.dart';
-import '../models/power_up.dart';
-import '../models/iap_product.dart';
+import '../models/game_state.dart';
+import '../models/achievement.dart';
+import '../models/daily_challenge.dart';
 import '../services/storage_service.dart';
-import '../services/ad_service.dart';
-import '../services/iap_service.dart';
-import '../services/audio_service.dart';
-import '../config/constants.dart';
 import '../game/utils/sequence_generator.dart';
 import '../game/utils/score_calculator.dart';
+import '../config/constants.dart';
 
+/// Main game state provider
+/// Manages player data, level progression, and gameplay state
 class GameProvider with ChangeNotifier {
   final StorageService _storage;
-  final AdService _adService;
-  final IAPService _iapService;
-  final AudioService _audioService;
   final SequenceGenerator _sequenceGenerator = SequenceGenerator();
 
   PlayerData _playerData = PlayerData();
-  Level? _currentLevel;
-  List<int>? _currentSequence;
-  List<int> _userInput = [];
-  int _consecutivePerfectLevels = 0;
-  bool _isPerfectLevel = true;
+  GameState? _currentGameState;
+  bool _isLoaded = false;
 
-  GameProvider(
-    this._storage,
-    this._adService,
-    this._iapService,
-    this._audioService,
-  ) {
+  GameProvider(this._storage) {
     _loadPlayerData();
   }
 
+  // Convenience getters
+  int get currentLevelNumber => _playerData.currentLevel;
+  List<DailyChallenge> get dailyChallenges => _playerData.dailyChallenges;
+
   // Getters
   PlayerData get playerData => _playerData;
-  Level? get currentLevel => _currentLevel;
-  List<int>? get currentSequence => _currentSequence;
-  int get currentLevelNumber => _playerData.currentLevel;
+  GameState? get currentGameState => _currentGameState;
+  bool get isLoaded => _isLoaded;
+  bool get isPlaying => _currentGameState != null;
+
+  // Player stats
+  int get currentLevel => _playerData.currentLevel;
   int get lives => _playerData.lives;
   int get coins => _playerData.coins;
   int get gems => _playerData.gems;
-  int get consecutivePerfectLevels => _consecutivePerfectLevels;
+  int get consecutivePerfectLevels => _playerData.consecutivePerfectLevels;
+  List<int> get highScores => _playerData.highScores;
+  int get bestScore => _playerData.bestScore;
 
+  // Lives system
+  bool get hasLives => _playerData.lives > 0;
+  bool get canClaimDailyReward => _playerData.canClaimDailyReward;
+
+  /// Load player data from storage
   Future<void> _loadPlayerData() async {
-    _playerData = await _storage.loadPlayerData();
-    _playerData.updateLives(); // Update lives based on time
-    await _savePlayerData();
-
-    // Check if ads have been removed
-    final adsRemoved = await _storage.isPurchased(IAPProduct.removeAds.id);
-    _adService.setAdsRemoved(adsRemoved);
-
-    notifyListeners();
+    try {
+      _playerData = await _storage.loadPlayerData();
+      _playerData.updateLives(); // Update lives based on time elapsed
+      _playerData.updateConsecutiveDays(); // Update consecutive days played
+      _playerData.updateDailyChallenges(); // Generate or update daily challenges
+      await _savePlayerData();
+      _isLoaded = true;
+      notifyListeners();
+    } catch (e) {
+      print('Error loading player data: $e');
+      _playerData = PlayerData();
+      _isLoaded = true;
+      notifyListeners();
+    }
   }
 
+  /// Save player data to storage
   Future<void> _savePlayerData() async {
-    await _storage.savePlayerData(_playerData);
+    try {
+      await _storage.savePlayerData(_playerData);
+    } catch (e) {
+      print('Error saving player data: $e');
+    }
   }
 
-  // ============ LEVEL MANAGEMENT ============
+  // ===== Level Management =====
 
-  // Start a new level
-  Future<void> startLevel(int levelNumber) async {
-    _currentLevel = Level.fromNumber(levelNumber);
-    _currentSequence = _sequenceGenerator.generateBalancedSequence(
-      _currentLevel!.sequenceLength,
-      _currentLevel!.colorCount,
+  /// Start a new level
+  Future<GameState?> startLevel(int levelNumber) async {
+    // Check if player has lives
+    if (!hasLives) {
+      print('No lives remaining');
+      return null;
+    }
+
+    // Create level configuration
+    final level = Level.fromNumber(levelNumber);
+
+    // Generate sequence
+    final sequence = _sequenceGenerator.generateValidSequence(
+      level.sequenceLength,
+      level.colorCount,
     );
-    _userInput = [];
-    _isPerfectLevel = true;
+
+    // Create game state
+    _currentGameState = GameState(
+      level: level,
+      sequence: sequence,
+      phase: GamePhase.memorize,
+    );
+
     notifyListeners();
+    return _currentGameState;
   }
 
-  // User taps a button
+  /// Add user input during execute phase
   void addInput(int colorIndex) {
-    if (_currentSequence == null) return;
+    if (_currentGameState == null) return;
+    if (_currentGameState!.phase != GamePhase.execute) return;
 
-    _userInput.add(colorIndex);
+    final newState = _currentGameState!.addInput(colorIndex);
+    _currentGameState = newState;
 
-    // Check if input is correct
-    final currentIndex = _userInput.length - 1;
-    if (_userInput[currentIndex] != _currentSequence![currentIndex]) {
-      _isPerfectLevel = false;
+    // Check if sequence is complete
+    if (newState.isSequenceComplete) {
+      if (newState.isCurrentInputCorrect) {
+        _currentGameState = newState.markCompleted();
+      } else {
+        _currentGameState = newState.markFailed();
+      }
+    } else if (!newState.isLastInputCorrect) {
+      // Wrong input - fail immediately
+      _currentGameState = newState.markFailed();
     }
 
     notifyListeners();
   }
 
-  // Check if sequence is complete and correct
-  bool isSequenceComplete() {
-    if (_currentSequence == null) return false;
-    return _userInput.length == _currentSequence!.length;
+  /// Update game time (called every frame)
+  void updateTime(double deltaTime) {
+    if (_currentGameState == null) return;
+    if (_currentGameState!.phase != GamePhase.execute) return;
+
+    _currentGameState = _currentGameState!.updateTime(deltaTime);
+    notifyListeners();
   }
 
-  bool isSequenceCorrect() {
-    if (_currentSequence == null) return false;
-    if (_userInput.length != _currentSequence!.length) return false;
-
-    for (int i = 0; i < _userInput.length; i++) {
-      if (_userInput[i] != _currentSequence![i]) return false;
-    }
-    return true;
+  /// Start execute phase
+  void startExecutePhase() {
+    if (_currentGameState == null) return;
+    _currentGameState = _currentGameState!.startExecutePhase();
+    notifyListeners();
   }
 
-  // Complete level
-  Future<int> completeLevel({double? remainingTime, bool? isPerfect}) async {
-    if (_currentLevel == null) return 0;
+  /// Complete current level
+  Future<int> completeLevel() async {
+    if (_currentGameState == null) return 0;
 
-    // Use provided parameters or internal state
-    final timeRemaining = remainingTime ?? 0.0;
-    final perfect = isPerfect ?? _isPerfectLevel;
+    final state = _currentGameState!;
+    final level = state.level;
 
     // Calculate score
-    final comboMultiplier = _calculateComboMultiplier();
-    final score = _calculateScore(
-      baseScore: _currentLevel!.baseScore,
-      remainingTime: timeRemaining,
+    final comboMultiplier = ScoreCalculator.calculateComboMultiplier(
+      _playerData.consecutivePerfectLevels,
+    );
+    final score = ScoreCalculator.calculateScore(
+      baseScore: level.baseScore,
+      remainingTime: state.remainingTime,
       comboMultiplier: comboMultiplier,
-      isPerfect: perfect,
+      isPerfect: state.isPerfectLevel,
+    );
+
+    // Calculate coins
+    final coinsEarned = ScoreCalculator.calculateCoinsEarned(
+      isPerfect: state.isPerfectLevel,
     );
 
     // Update player data
-    _playerData.currentLevel++;
-    _playerData.addCoins(GameConstants.coinsPerLevel);
+    _playerData.currentLevel = level.number + 1;
+    _playerData.totalLevelsCompleted++;
+    _playerData.addCoins(coinsEarned);
+    _playerData.addHighScore(score);
 
-    if (perfect) {
-      _consecutivePerfectLevels++;
-      _playerData.addCoins(GameConstants.coinsForPerfectLevel);
-      _audioService.playSfx('level_complete');
+    if (state.isPerfectLevel) {
+      _playerData.consecutivePerfectLevels++;
+      _playerData.perfectLevelsCount++;
     } else {
-      _consecutivePerfectLevels = 0;
+      _playerData.consecutivePerfectLevels = 0;
     }
 
-    await _storage.addHighScore(score);
+    // Update daily challenges
+    _playerData.updateChallengeProgress(ChallengeType.completeLevels, 1);
+    if (state.isPerfectLevel) {
+      _playerData.updateChallengeProgress(ChallengeType.perfectStreak, 1);
+    }
+    if (state.remainingTime >= 8) {
+      _playerData.updateChallengeProgress(ChallengeType.speedRun, state.remainingTime.toInt());
+    }
+    if (score >= 800) {
+      _playerData.updateChallengeProgress(ChallengeType.highScore, score);
+    }
+
+    // Check achievements
+    await _checkAndCompleteAchievements();
+
     await _savePlayerData();
 
+    // Clear game state
+    _currentGameState = null;
     notifyListeners();
+
     return score;
   }
 
+  /// Fail current level
   Future<void> failLevel() async {
+    // Lose a life
     _playerData.loseLife();
-    _consecutivePerfectLevels = 0;
+    _playerData.consecutivePerfectLevels = 0;
+
     await _savePlayerData();
 
-    _audioService.playSfx('life_lost');
-
-    // Show interstitial ad if applicable
-    if (_playerData.lives == 0) {
-      await _adService.showInterstitialAd();
-    }
-
+    // Clear game state
+    _currentGameState = null;
     notifyListeners();
   }
 
-  int _calculateComboMultiplier() {
-    if (_consecutivePerfectLevels >= 10) return GameConstants.combo10Multiplier;
-    if (_consecutivePerfectLevels >= 5) return GameConstants.combo5Multiplier;
-    if (_consecutivePerfectLevels >= 3) return GameConstants.combo3Multiplier;
-    return 1;
+  /// Pause game
+  void pauseGame() {
+    if (_currentGameState == null) return;
+    _currentGameState = _currentGameState!.pause();
+    notifyListeners();
   }
 
-  int _calculateScore({
-    required int baseScore,
-    required double remainingTime,
-    required int comboMultiplier,
-    required bool isPerfect,
-  }) {
-    int score = baseScore;
+  /// Resume game
+  void resumeGame() {
+    if (_currentGameState == null) return;
+    _currentGameState = _currentGameState!.resume();
+    notifyListeners();
+  }
 
-    // Time bonus
-    int timeBonus = (remainingTime * GameConstants.timeBonus).round();
-    score += timeBonus;
+  /// Quit current game
+  void quitGame() {
+    _currentGameState = null;
+    notifyListeners();
+  }
 
-    // Apply combo multiplier
-    score = (score * comboMultiplier);
+  // ===== Lives Management =====
 
-    // Perfect level bonus
-    if (isPerfect) {
-      score += GameConstants.perfectLevelBonus;
+  /// Update lives (regeneration)
+  Future<void> updateLives() async {
+    _playerData.updateLives();
+    await _savePlayerData();
+    notifyListeners();
+  }
+
+  /// Add a life (from ad or purchase)
+  Future<void> addLife() async {
+    _playerData.addLife();
+    await _savePlayerData();
+    notifyListeners();
+  }
+
+  /// Buy lives with coins or gems
+  Future<bool> buyLives(int count, {bool useGems = false}) async {
+    final cost = useGems ? 1 * count : 20 * count; // Example pricing
+
+    if (useGems) {
+      if (!_playerData.spendGems(cost)) return false;
+    } else {
+      if (!_playerData.spendCoins(cost)) return false;
     }
 
-    return score;
+    for (int i = 0; i < count; i++) {
+      _playerData.addLife();
+    }
+
+    await _savePlayerData();
+    notifyListeners();
+    return true;
   }
 
-  // ============ POWER-UPS ============
+  // ===== Currency Management =====
 
-  Future<bool> usePowerUp(PowerUpType type, {bool useCoins = true}) async {
-    final powerUp = PowerUp.getByType(type);
-    if (powerUp == null) return false;
+  /// Add coins
+  Future<void> addCoins(int amount) async {
+    _playerData.addCoins(amount);
+    await _savePlayerData();
+    notifyListeners();
+  }
 
-    if (useCoins) {
-      if (_playerData.coins < powerUp.coinCost) {
-        return false;
+  /// Spend coins
+  Future<bool> spendCoins(int amount) async {
+    if (!_playerData.spendCoins(amount)) return false;
+    await _savePlayerData();
+    notifyListeners();
+    return true;
+  }
+
+  /// Add gems
+  Future<void> addGems(int amount) async {
+    _playerData.addGems(amount);
+    await _savePlayerData();
+    notifyListeners();
+  }
+
+  /// Spend gems
+  Future<bool> spendGems(int amount) async {
+    if (!_playerData.spendGems(amount)) return false;
+    await _savePlayerData();
+    notifyListeners();
+    return true;
+  }
+
+  // ===== Power-Ups =====
+
+  /// Use hint power-up
+  Future<bool> useHint() async {
+    if (_currentGameState == null) return false;
+    if (await spendCoins(GameConstants.hintCost)) {
+      _playerData.powerUpsUsedCount++;
+      // Update daily challenge for no power-ups (they used one, so reset progress)
+      for (var challenge in _playerData.dailyChallenges) {
+        if (challenge.type == ChallengeType.noPowerUps && !challenge.isCompleted) {
+          challenge.currentProgress = 0;
+        }
       }
-      _playerData.spendCoins(powerUp.coinCost);
       await _savePlayerData();
-      _audioService.playSfx('powerup');
       notifyListeners();
       return true;
     }
-
     return false;
   }
 
-  Future<bool> usePowerUpWithAd(PowerUpType type) async {
-    final powerUp = PowerUp.getByType(type);
-    if (powerUp == null || !powerUp.canUseAd) return false;
-
-    final success = await _adService.showRewardedAd(() {
-      _audioService.playSfx('powerup');
-    });
-
-    return success;
-  }
-
-  // ============ LIVES MANAGEMENT ============
-
-  Future<void> watchAdForLife() async {
-    if (!_playerData.canWatchAdForLife()) {
-      return;
-    }
-
-    final success = await _adService.showRewardedAd(() {
-      _playerData.addLife();
-      _playerData.incrementAdForLifeCount();
-      _savePlayerData();
-      _audioService.playSfx('coin');
-      notifyListeners();
-    });
-
-    if (!success) {
-      // Ad failed to show
-    }
-  }
-
-  Future<void> buyLivesWithIAP() async {
-    final success = await _iapService.purchaseProduct(IAPProduct.lives5.id);
-    if (success) {
-      _playerData.addLives(5);
+  /// Use extra time power-up
+  Future<bool> useExtraTime() async {
+    if (_currentGameState == null) return false;
+    if (await spendCoins(GameConstants.extraTimeCost)) {
+      _playerData.powerUpsUsedCount++;
+      // Update daily challenge for no power-ups
+      for (var challenge in _playerData.dailyChallenges) {
+        if (challenge.type == ChallengeType.noPowerUps && !challenge.isCompleted) {
+          challenge.currentProgress = 0;
+        }
+      }
+      // Add extra time to current game
+      final newTime = _currentGameState!.remainingTime + GameConstants.extraTimeSeconds;
+      _currentGameState = _currentGameState!.copyWith(remainingTime: newTime);
       await _savePlayerData();
-      _audioService.playSfx('purchase');
       notifyListeners();
+      return true;
     }
+    return false;
   }
 
-  // Add life from ad (legacy method for compatibility)
-  void addLifeFromAd() {
-    _playerData.addLife();
-    _savePlayerData();
-    notifyListeners();
-  }
-
-  // ============ CURRENCY MANAGEMENT ============
-
-  Future<void> watchAdForCoins() async {
-    final success = await _adService.showRewardedAd(() {
-      _playerData.addCoins(GameConstants.coinsPerAd);
-      _savePlayerData();
-      _audioService.playSfx('coin');
-      notifyListeners();
-    });
-
-    if (!success) {
-      // Ad failed to show
-    }
-  }
-
-  // Add coins from ad (legacy method for compatibility)
-  void addCoinsFromAd(int amount) {
-    _playerData.addCoins(amount);
-    _savePlayerData();
-    notifyListeners();
-  }
-
-  Future<void> purchaseCoins(String productId) async {
-    final product = IAPProduct.getById(productId);
-    if (product == null || product.coinAmount == null) return;
-
-    final success = await _iapService.purchaseProduct(productId);
-    if (success) {
-      _playerData.addCoins(product.coinAmount!);
+  /// Use slow motion power-up (not implemented in game state yet)
+  Future<bool> useSlowMotion() async {
+    if (_currentGameState == null) return false;
+    if (await spendCoins(GameConstants.slowMotionCost)) {
+      _playerData.powerUpsUsedCount++;
+      // Update daily challenge for no power-ups
+      for (var challenge in _playerData.dailyChallenges) {
+        if (challenge.type == ChallengeType.noPowerUps && !challenge.isCompleted) {
+          challenge.currentProgress = 0;
+        }
+      }
       await _savePlayerData();
-      _audioService.playSfx('purchase');
       notifyListeners();
+      return true;
     }
+    return false;
   }
 
-  Future<void> purchaseGems(String productId) async {
-    final product = IAPProduct.getById(productId);
-    if (product == null || product.gemAmount == null) return;
-
-    final success = await _iapService.purchaseProduct(productId);
-    if (success) {
-      _playerData.addGems(product.gemAmount!);
+  /// Skip level
+  Future<bool> skipLevel() async {
+    if (_currentGameState == null) return false;
+    if (await spendCoins(GameConstants.skipLevelCost)) {
+      _playerData.currentLevel++;
       await _savePlayerData();
-      _audioService.playSfx('purchase');
+      _currentGameState = null;
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  // ===== Themes & Achievements =====
+
+  /// Unlock theme (called by shop after spending currency)
+  Future<void> unlockTheme(int themeId) async {
+    if (_playerData.isThemeUnlocked(themeId)) return;
+    _playerData.unlockTheme(themeId);
+    await _checkAndCompleteAchievements();
+    await _savePlayerData();
+    notifyListeners();
+  }
+
+  /// Set current theme
+  Future<void> setTheme(int themeId) async {
+    if (!_playerData.isThemeUnlocked(themeId)) return;
+    _playerData.currentTheme = themeId;
+    await _savePlayerData();
+    notifyListeners();
+  }
+
+  /// Complete achievement and award rewards
+  Future<void> completeAchievement(int achievementId) async {
+    if (_playerData.isAchievementCompleted(achievementId)) return;
+
+    final achievement = Achievement.getAchievementById(achievementId);
+    if (achievement == null) return;
+
+    _playerData.completeAchievement(achievementId);
+
+    // Award rewards
+    if (achievement.coinReward > 0) {
+      _playerData.addCoins(achievement.coinReward);
+    }
+    if (achievement.gemReward > 0) {
+      _playerData.addGems(achievement.gemReward);
+    }
+
+    await _savePlayerData();
+    notifyListeners();
+  }
+
+  /// Check and complete achievements based on current progress
+  Future<void> _checkAndCompleteAchievements() async {
+    final achievements = Achievement.getAllAchievements();
+    bool anyCompleted = false;
+
+    for (final achievement in achievements) {
+      if (_playerData.isAchievementCompleted(achievement.id)) continue;
+
+      bool shouldComplete = false;
+
+      switch (achievement.type) {
+        case AchievementType.levelComplete:
+          shouldComplete = _playerData.totalLevelsCompleted >= achievement.targetValue;
+          break;
+        case AchievementType.worldComplete:
+          final currentWorld = (_playerData.currentLevel / 20).ceil();
+          shouldComplete = currentWorld >= achievement.targetValue;
+          break;
+        case AchievementType.perfectLevels:
+          shouldComplete = _playerData.perfectLevelsCount >= achievement.targetValue;
+          break;
+        case AchievementType.comboMultiplier:
+          shouldComplete = _playerData.consecutivePerfectLevels >= achievement.targetValue;
+          break;
+        case AchievementType.coinsCollected:
+          shouldComplete = _playerData.totalCoinsEarned >= achievement.targetValue;
+          break;
+        case AchievementType.themesUnlocked:
+          shouldComplete = _playerData.unlockedThemes.length >= achievement.targetValue;
+          break;
+        case AchievementType.powerUpsUsed:
+          shouldComplete = _playerData.powerUpsUsedCount >= achievement.targetValue;
+          break;
+        case AchievementType.highScore:
+          shouldComplete = _playerData.bestScore >= achievement.targetValue;
+          break;
+        case AchievementType.dailyChallenges:
+          shouldComplete = _playerData.dailyChallengesCompleted >= achievement.targetValue;
+          break;
+        case AchievementType.consecutiveDays:
+          shouldComplete = _playerData.consecutiveDaysPlayed >= achievement.targetValue;
+          break;
+        case AchievementType.speedRun:
+          // This is checked per-level, not automatically
+          break;
+      }
+
+      if (shouldComplete) {
+        await completeAchievement(achievement.id);
+        anyCompleted = true;
+        print('Achievement unlocked: ${achievement.title}');
+      }
+    }
+
+    if (anyCompleted) {
       notifyListeners();
     }
   }
 
-  // ============ PREMIUM FEATURES ============
+  // ===== Daily Rewards =====
 
-  Future<void> removeAds() async {
-    final success =
-        await _iapService.purchaseNonConsumable(IAPProduct.removeAds.id);
-    if (success) {
-      _adService.setAdsRemoved(true);
-      _audioService.playSfx('purchase');
-      notifyListeners();
-    }
-  }
-
-  Future<bool> hasRemovedAds() async {
-    return await _storage.isPurchased(IAPProduct.removeAds.id);
-  }
-
-  // ============ DAILY REWARDS ============
-
-  Future<void> claimDailyBonus() async {
-    // Check if daily bonus was already claimed today
-    // This would require additional tracking in PlayerData
-    _playerData.addCoins(GameConstants.dailyLoginBonus);
+  /// Claim daily reward
+  Future<bool> claimDailyReward() async {
+    if (!_playerData.canClaimDailyReward) return false;
+    _playerData.claimDailyReward();
     await _savePlayerData();
-    _audioService.playSfx('coin');
+    notifyListeners();
+    return true;
+  }
+
+  // ===== Debug & Utility =====
+
+  /// Reset progress (for testing)
+  Future<void> resetProgress() async {
+    _playerData = PlayerData();
+    await _storage.resetProgress();
+    _currentGameState = null;
     notifyListeners();
   }
 
-  // ============ SETTINGS ============
-
-  Future<void> updateMusicSetting(bool enabled) async {
-    _playerData.settings['music'] = enabled;
-    _audioService.setMusicEnabled(enabled);
-    await _savePlayerData();
-    notifyListeners();
+  /// Reload data from storage
+  Future<void> reload() async {
+    await _loadPlayerData();
   }
 
-  Future<void> updateSfxSetting(bool enabled) async {
-    _playerData.settings['sfx'] = enabled;
-    _audioService.setSfxEnabled(enabled);
-    await _savePlayerData();
-    notifyListeners();
+  /// Get time until next life
+  Duration? getTimeUntilNextLife() {
+    if (_playerData.lives >= GameConstants.maxLives) return null;
+
+    final now = DateTime.now();
+    final elapsed = now.difference(_playerData.lastLifeUpdate);
+    final minutesUntilNext = GameConstants.lifeRegenerationMinutes -
+        (elapsed.inMinutes % GameConstants.lifeRegenerationMinutes);
+
+    return Duration(minutes: minutesUntilNext);
   }
-
-  Future<void> updateHapticsSetting(bool enabled) async {
-    _playerData.settings['haptics'] = enabled;
-    await _savePlayerData();
-    notifyListeners();
-  }
-
-  // ============ UTILITIES ============
-
-  bool canAffordPowerUp(PowerUpType type) {
-    final powerUp = PowerUp.getByType(type);
-    if (powerUp == null) return false;
-    return _playerData.coins >= powerUp.coinCost;
-  }
-
-  bool get canWatchAdForLife => _playerData.canWatchAdForLife();
-  bool get hasLives => _playerData.lives > 0;
-  bool get isRewardedAdReady => _adService.isRewardedAdReady;
 }

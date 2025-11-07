@@ -1,119 +1,60 @@
-import 'package:sequence_rush_game/config/constants.dart';
+import '../config/constants.dart';
+import 'daily_challenge.dart';
 
-/// Represents the player's game data and progress
+/// Player data model for persistence
+/// Based on GDD Section 6.2 - Data Storage
 class PlayerData {
+  int currentLevel;
+  int lives;
   int coins;
   int gems;
-  int lives;
-  int currentLevel;
-  int highestLevel;
-  int totalScore;
-  DateTime? lastLifeRegenTime;
   DateTime lastLifeUpdate;
-  int adForLifeCount;
-  DateTime? lastAdForLifeDate;
-  Map<String, bool> purchasedPowerUps;
-  Map<String, int> powerUpCounts;
   List<int> highScores;
   List<int> unlockedThemes;
   int currentTheme;
   Set<int> completedAchievements;
-  bool soundEnabled;
-  bool musicEnabled;
-  bool hapticsEnabled;
-  Map<String, bool> settings;
+  int consecutivePerfectLevels;
+  int totalLevelsCompleted;
+  int totalCoinsEarned;
+  int perfectLevelsCount;
+  int powerUpsUsedCount;
+  DateTime? lastDailyRewardClaim;
+  DateTime? lastLoginDate;
+  int consecutiveDaysPlayed;
+  int adsWatchedToday;
+  DateTime? lastAdDate;
+  List<DailyChallenge> dailyChallenges;
+  int dailyChallengesCompleted;
 
   PlayerData({
+    this.currentLevel = 1,
+    this.lives = GameConstants.maxLives,
     this.coins = 0,
     this.gems = 0,
-    this.lives = GameConstants.maxLives,
-    this.currentLevel = 1,
-    this.highestLevel = 1,
-    this.totalScore = 0,
-    this.lastLifeRegenTime,
     DateTime? lastLifeUpdate,
-    this.adForLifeCount = 0,
-    this.lastAdForLifeDate,
-    Map<String, bool>? purchasedPowerUps,
-    Map<String, int>? powerUpCounts,
     List<int>? highScores,
     List<int>? unlockedThemes,
     this.currentTheme = 0,
     Set<int>? completedAchievements,
-    this.soundEnabled = true,
-    this.musicEnabled = true,
-    this.hapticsEnabled = true,
-    Map<String, bool>? settings,
-  })  : purchasedPowerUps = purchasedPowerUps ?? {},
-        powerUpCounts = powerUpCounts ?? {},
-        lastLifeUpdate = lastLifeUpdate ?? DateTime.now(),
+    this.consecutivePerfectLevels = 0,
+    this.totalLevelsCompleted = 0,
+    this.totalCoinsEarned = 0,
+    this.perfectLevelsCount = 0,
+    this.powerUpsUsedCount = 0,
+    this.lastDailyRewardClaim,
+    this.lastLoginDate,
+    this.consecutiveDaysPlayed = 0,
+    this.adsWatchedToday = 0,
+    this.lastAdDate,
+    List<DailyChallenge>? dailyChallenges,
+    this.dailyChallengesCompleted = 0,
+  })  : lastLifeUpdate = lastLifeUpdate ?? DateTime.now(),
         highScores = highScores ?? [],
-        unlockedThemes = unlockedThemes ?? [0],
+        unlockedThemes = unlockedThemes ?? [0], // Theme 0 is free
         completedAchievements = completedAchievements ?? {},
-        settings = settings ?? {
-          'music': true,
-          'sfx': true,
-          'haptics': true,
-        };
+        dailyChallenges = dailyChallenges ?? [];
 
-  /// Add coins to the player's balance
-  void addCoins(int amount) {
-    if (amount > 0) {
-      coins += amount;
-    }
-  }
-
-  /// Add gems to the player's balance
-  void addGems(int amount) {
-    if (amount > 0) {
-      gems += amount;
-    }
-  }
-
-  /// Spend coins
-  bool spendCoins(int amount) {
-    if (coins >= amount) {
-      coins -= amount;
-      return true;
-    }
-    return false;
-  }
-
-  /// Spend gems
-  bool spendGems(int amount) {
-    if (gems >= amount) {
-      gems -= amount;
-      return true;
-    }
-    return false;
-  }
-
-  /// Add lives to the player
-  void addLives(int amount) {
-    lives = (lives + amount).clamp(0, GameConstants.maxLives);
-  }
-
-  /// Add a single life
-  void addLife() {
-    lives++;
-    if (lives > GameConstants.maxLives) lives = GameConstants.maxLives;
-  }
-
-  /// Remove a life
-  bool removeLife() {
-    if (lives > 0) {
-      lives--;
-      return true;
-    }
-    return false;
-  }
-
-  /// Lose a life (alias for removeLife)
-  void loseLife() {
-    if (lives > 0) lives--;
-  }
-
-  /// Update lives based on time elapsed
+  /// Update lives based on time elapsed (1 life per 15 minutes)
   void updateLives() {
     if (lives >= GameConstants.maxLives) {
       lastLifeUpdate = DateTime.now();
@@ -130,185 +71,296 @@ class PlayerData {
     }
   }
 
-  /// Check if lives need to be regenerated
-  void regenerateLives() {
-    if (lives >= GameConstants.maxLives) {
-      lastLifeRegenTime = null;
+  /// Add coins and track total earned
+  void addCoins(int amount) {
+    coins += amount;
+    totalCoinsEarned += amount;
+  }
+
+  /// Spend coins (returns false if not enough coins)
+  bool spendCoins(int amount) {
+    if (coins < amount) return false;
+    coins -= amount;
+    return true;
+  }
+
+  /// Add gems
+  void addGems(int amount) {
+    gems += amount;
+  }
+
+  /// Spend gems (returns false if not enough gems)
+  bool spendGems(int amount) {
+    if (gems < amount) return false;
+    gems -= amount;
+    return true;
+  }
+
+  /// Lose a life
+  void loseLife() {
+    lives = (lives - 1).clamp(0, GameConstants.maxLives);
+  }
+
+  /// Add a life (e.g., from rewarded ad)
+  void addLife() {
+    lives = (lives + 1).clamp(0, GameConstants.maxLives);
+    lastLifeUpdate = DateTime.now();
+  }
+
+  /// Add a high score
+  void addHighScore(int score) {
+    highScores.add(score);
+    highScores.sort((a, b) => b.compareTo(a)); // Sort descending
+    if (highScores.length > 10) {
+      highScores = highScores.take(10).toList();
+    }
+  }
+
+  /// Get highest score
+  int get bestScore => highScores.isEmpty ? 0 : highScores.first;
+
+  /// Unlock a theme
+  void unlockTheme(int themeId) {
+    if (!unlockedThemes.contains(themeId)) {
+      unlockedThemes.add(themeId);
+    }
+  }
+
+  /// Check if theme is unlocked
+  bool isThemeUnlocked(int themeId) {
+    return unlockedThemes.contains(themeId);
+  }
+
+  /// Complete an achievement
+  void completeAchievement(int achievementId) {
+    completedAchievements.add(achievementId);
+  }
+
+  /// Check if achievement is completed
+  bool isAchievementCompleted(int achievementId) {
+    return completedAchievements.contains(achievementId);
+  }
+
+  /// Check if daily reward is available
+  bool get canClaimDailyReward {
+    if (lastDailyRewardClaim == null) return true;
+    final now = DateTime.now();
+    final lastClaim = lastDailyRewardClaim!;
+    return now.difference(lastClaim).inHours >= 24;
+  }
+
+  /// Claim daily reward
+  void claimDailyReward() {
+    addCoins(GameConstants.coinsDailyBonus);
+    lastDailyRewardClaim = DateTime.now();
+  }
+
+  /// Track ad watching (reset daily)
+  void watchAd() {
+    final now = DateTime.now();
+    if (lastAdDate == null || !_isSameDay(now, lastAdDate!)) {
+      // New day, reset counter
+      adsWatchedToday = 0;
+      lastAdDate = now;
+    }
+    adsWatchedToday++;
+  }
+
+  /// Check if can watch more rewarded ads today
+  bool get canWatchRewardedAd {
+    final now = DateTime.now();
+    if (lastAdDate == null || !_isSameDay(now, lastAdDate!)) {
+      return true; // New day
+    }
+    return adsWatchedToday < GameConstants.maxRewardedAdsPerDay;
+  }
+
+  /// Update consecutive days played
+  void updateConsecutiveDays() {
+    final now = DateTime.now();
+    if (lastLoginDate == null) {
+      // First login
+      consecutiveDaysPlayed = 1;
+      lastLoginDate = now;
       return;
     }
 
-    final now = DateTime.now();
-    lastLifeRegenTime ??= now;
-
-    final secondsSinceLastRegen =
-        now.difference(lastLifeRegenTime!).inSeconds;
-    final livesToAdd = secondsSinceLastRegen ~/ GameConstants.livesRegenTime;
-
-    if (livesToAdd > 0) {
-      addLives(livesToAdd);
-      lastLifeRegenTime = now;
+    final daysSinceLastLogin = now.difference(lastLoginDate!).inDays;
+    if (daysSinceLastLogin == 1) {
+      // Consecutive day
+      consecutiveDaysPlayed++;
+    } else if (daysSinceLastLogin > 1) {
+      // Streak broken
+      consecutiveDaysPlayed = 1;
     }
+    // If same day, don't update
+    lastLoginDate = now;
   }
 
-  /// Check if player can watch an ad for a life today
-  bool canWatchAdForLife() {
-    final now = DateTime.now();
-
-    // Reset counter if it's a new day
-    if (lastAdForLifeDate == null ||
-        !_isSameDay(lastAdForLifeDate!, now)) {
-      adForLifeCount = 0;
-      lastAdForLifeDate = now;
-    }
-
-    return adForLifeCount < GameConstants.adForLifeLimit;
-  }
-
-  /// Increment the ad for life counter
-  void incrementAdForLifeCount() {
+  /// Update or generate daily challenges
+  void updateDailyChallenges() {
     final now = DateTime.now();
 
-    // Reset counter if it's a new day
-    if (lastAdForLifeDate == null ||
-        !_isSameDay(lastAdForLifeDate!, now)) {
-      adForLifeCount = 0;
-      lastAdForLifeDate = now;
-    }
-
-    adForLifeCount++;
-    lastAdForLifeDate = now;
-  }
-
-  /// Check if two dates are on the same day
-  bool _isSameDay(DateTime date1, DateTime date2) {
-    return date1.year == date2.year &&
-        date1.month == date2.month &&
-        date1.day == date2.day;
-  }
-
-  /// Update highest level if current level is higher
-  void updateHighestLevel() {
-    if (currentLevel > highestLevel) {
-      highestLevel = currentLevel;
+    // Check if we need new challenges
+    if (dailyChallenges.isEmpty ||
+        !_isSameDay(dailyChallenges.first.date, now)) {
+      // Generate new challenges for today
+      dailyChallenges = DailyChallenge.generateDailyChallenges(now);
     }
   }
 
-  /// Add score to total
-  void addScore(int score) {
-    if (score > 0) {
-      totalScore += score;
+  /// Update daily challenge progress
+  void updateChallengeProgress(ChallengeType type, int value) {
+    for (var challenge in dailyChallenges) {
+      if (challenge.type == type && !challenge.isCompleted) {
+        if (type == ChallengeType.speedRun || type == ChallengeType.highScore) {
+          // For these types, we check if value meets or exceeds target
+          if (value >= challenge.targetValue) {
+            challenge.currentProgress = challenge.targetValue;
+            challenge.isCompleted = true;
+            dailyChallengesCompleted++;
+          }
+        } else {
+          // For cumulative challenges, increment progress
+          challenge.currentProgress++;
+          if (challenge.currentProgress >= challenge.targetValue) {
+            challenge.isCompleted = true;
+            dailyChallengesCompleted++;
+          }
+        }
+      }
     }
+  }
+
+  /// Get all completed challenges that haven't been claimed
+  List<DailyChallenge> get unclaimedChallenges {
+    return dailyChallenges.where((c) => c.isCompleted).toList();
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   /// Convert to JSON for storage
   Map<String, dynamic> toJson() {
     return {
+      'currentLevel': currentLevel,
+      'lives': lives,
       'coins': coins,
       'gems': gems,
-      'lives': lives,
-      'currentLevel': currentLevel,
-      'highestLevel': highestLevel,
-      'totalScore': totalScore,
-      'lastLifeRegenTime': lastLifeRegenTime?.toIso8601String(),
       'lastLifeUpdate': lastLifeUpdate.toIso8601String(),
-      'adForLifeCount': adForLifeCount,
-      'lastAdForLifeDate': lastAdForLifeDate?.toIso8601String(),
-      'purchasedPowerUps': purchasedPowerUps,
-      'powerUpCounts': powerUpCounts,
       'highScores': highScores,
       'unlockedThemes': unlockedThemes,
       'currentTheme': currentTheme,
       'completedAchievements': completedAchievements.toList(),
-      'soundEnabled': soundEnabled,
-      'musicEnabled': musicEnabled,
-      'hapticsEnabled': hapticsEnabled,
-      'settings': settings,
+      'consecutivePerfectLevels': consecutivePerfectLevels,
+      'totalLevelsCompleted': totalLevelsCompleted,
+      'totalCoinsEarned': totalCoinsEarned,
+      'perfectLevelsCount': perfectLevelsCount,
+      'powerUpsUsedCount': powerUpsUsedCount,
+      'lastDailyRewardClaim': lastDailyRewardClaim?.toIso8601String(),
+      'lastLoginDate': lastLoginDate?.toIso8601String(),
+      'consecutiveDaysPlayed': consecutiveDaysPlayed,
+      'adsWatchedToday': adsWatchedToday,
+      'lastAdDate': lastAdDate?.toIso8601String(),
+      'dailyChallenges': dailyChallenges.map((c) => c.toJson()).toList(),
+      'dailyChallengesCompleted': dailyChallengesCompleted,
     };
   }
 
   /// Create from JSON
   factory PlayerData.fromJson(Map<String, dynamic> json) {
     return PlayerData(
+      currentLevel: json['currentLevel'] as int? ?? 1,
+      lives: json['lives'] as int? ?? GameConstants.maxLives,
       coins: json['coins'] as int? ?? 0,
       gems: json['gems'] as int? ?? 0,
-      lives: json['lives'] as int? ?? GameConstants.maxLives,
-      currentLevel: json['currentLevel'] as int? ?? 1,
-      highestLevel: json['highestLevel'] as int? ?? 1,
-      totalScore: json['totalScore'] as int? ?? 0,
-      lastLifeRegenTime: json['lastLifeRegenTime'] != null
-          ? DateTime.parse(json['lastLifeRegenTime'] as String)
-          : null,
       lastLifeUpdate: json['lastLifeUpdate'] != null
           ? DateTime.parse(json['lastLifeUpdate'] as String)
           : DateTime.now(),
-      adForLifeCount: json['adForLifeCount'] as int? ?? 0,
-      lastAdForLifeDate: json['lastAdForLifeDate'] != null
-          ? DateTime.parse(json['lastAdForLifeDate'] as String)
+      highScores: (json['highScores'] as List<dynamic>?)
+              ?.map((e) => e as int)
+              .toList() ??
+          [],
+      unlockedThemes: (json['unlockedThemes'] as List<dynamic>?)
+              ?.map((e) => e as int)
+              .toList() ??
+          [0],
+      currentTheme: json['currentTheme'] as int? ?? 0,
+      completedAchievements: (json['completedAchievements'] as List<dynamic>?)
+              ?.map((e) => e as int)
+              .toSet() ??
+          {},
+      consecutivePerfectLevels: json['consecutivePerfectLevels'] as int? ?? 0,
+      totalLevelsCompleted: json['totalLevelsCompleted'] as int? ?? 0,
+      totalCoinsEarned: json['totalCoinsEarned'] as int? ?? 0,
+      perfectLevelsCount: json['perfectLevelsCount'] as int? ?? 0,
+      powerUpsUsedCount: json['powerUpsUsedCount'] as int? ?? 0,
+      lastDailyRewardClaim: json['lastDailyRewardClaim'] != null
+          ? DateTime.parse(json['lastDailyRewardClaim'] as String)
           : null,
-      purchasedPowerUps:
-          Map<String, bool>.from(json['purchasedPowerUps'] as Map? ?? {}),
-      powerUpCounts:
-          Map<String, int>.from(json['powerUpCounts'] as Map? ?? {}),
-      highScores: List<int>.from(json['highScores'] ?? []),
-      unlockedThemes: List<int>.from(json['unlockedThemes'] ?? [0]),
-      currentTheme: json['currentTheme'] ?? 0,
-      completedAchievements:
-          Set<int>.from(json['completedAchievements'] ?? []),
-      soundEnabled: json['soundEnabled'] as bool? ?? true,
-      musicEnabled: json['musicEnabled'] as bool? ?? true,
-      hapticsEnabled: json['hapticsEnabled'] as bool? ?? true,
-      settings: Map<String, bool>.from(json['settings'] ?? {
-        'music': true,
-        'sfx': true,
-        'haptics': true,
-      }),
+      lastLoginDate: json['lastLoginDate'] != null
+          ? DateTime.parse(json['lastLoginDate'] as String)
+          : null,
+      consecutiveDaysPlayed: json['consecutiveDaysPlayed'] as int? ?? 0,
+      adsWatchedToday: json['adsWatchedToday'] as int? ?? 0,
+      lastAdDate: json['lastAdDate'] != null
+          ? DateTime.parse(json['lastAdDate'] as String)
+          : null,
+      dailyChallenges: (json['dailyChallenges'] as List<dynamic>?)
+              ?.map((e) => DailyChallenge.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      dailyChallengesCompleted: json['dailyChallengesCompleted'] as int? ?? 0,
     );
   }
 
-  /// Create a copy with modified values
+  /// Create a copy with modified fields
   PlayerData copyWith({
+    int? currentLevel,
+    int? lives,
     int? coins,
     int? gems,
-    int? lives,
-    int? currentLevel,
-    int? highestLevel,
-    int? totalScore,
-    DateTime? lastLifeRegenTime,
     DateTime? lastLifeUpdate,
-    int? adForLifeCount,
-    DateTime? lastAdForLifeDate,
-    Map<String, bool>? purchasedPowerUps,
-    Map<String, int>? powerUpCounts,
     List<int>? highScores,
     List<int>? unlockedThemes,
     int? currentTheme,
     Set<int>? completedAchievements,
-    bool? soundEnabled,
-    bool? musicEnabled,
-    bool? hapticsEnabled,
-    Map<String, bool>? settings,
+    int? consecutivePerfectLevels,
+    int? totalLevelsCompleted,
+    int? totalCoinsEarned,
+    int? perfectLevelsCount,
+    int? powerUpsUsedCount,
+    DateTime? lastDailyRewardClaim,
+    DateTime? lastLoginDate,
+    int? consecutiveDaysPlayed,
+    int? adsWatchedToday,
+    DateTime? lastAdDate,
+    List<DailyChallenge>? dailyChallenges,
+    int? dailyChallengesCompleted,
   }) {
     return PlayerData(
+      currentLevel: currentLevel ?? this.currentLevel,
+      lives: lives ?? this.lives,
       coins: coins ?? this.coins,
       gems: gems ?? this.gems,
-      lives: lives ?? this.lives,
-      currentLevel: currentLevel ?? this.currentLevel,
-      highestLevel: highestLevel ?? this.highestLevel,
-      totalScore: totalScore ?? this.totalScore,
-      lastLifeRegenTime: lastLifeRegenTime ?? this.lastLifeRegenTime,
       lastLifeUpdate: lastLifeUpdate ?? this.lastLifeUpdate,
-      adForLifeCount: adForLifeCount ?? this.adForLifeCount,
-      lastAdForLifeDate: lastAdForLifeDate ?? this.lastAdForLifeDate,
-      purchasedPowerUps: purchasedPowerUps ?? this.purchasedPowerUps,
-      powerUpCounts: powerUpCounts ?? this.powerUpCounts,
       highScores: highScores ?? this.highScores,
       unlockedThemes: unlockedThemes ?? this.unlockedThemes,
       currentTheme: currentTheme ?? this.currentTheme,
       completedAchievements: completedAchievements ?? this.completedAchievements,
-      soundEnabled: soundEnabled ?? this.soundEnabled,
-      musicEnabled: musicEnabled ?? this.musicEnabled,
-      hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
-      settings: settings ?? this.settings,
+      consecutivePerfectLevels: consecutivePerfectLevels ?? this.consecutivePerfectLevels,
+      totalLevelsCompleted: totalLevelsCompleted ?? this.totalLevelsCompleted,
+      totalCoinsEarned: totalCoinsEarned ?? this.totalCoinsEarned,
+      perfectLevelsCount: perfectLevelsCount ?? this.perfectLevelsCount,
+      powerUpsUsedCount: powerUpsUsedCount ?? this.powerUpsUsedCount,
+      lastDailyRewardClaim: lastDailyRewardClaim ?? this.lastDailyRewardClaim,
+      lastLoginDate: lastLoginDate ?? this.lastLoginDate,
+      consecutiveDaysPlayed: consecutiveDaysPlayed ?? this.consecutiveDaysPlayed,
+      adsWatchedToday: adsWatchedToday ?? this.adsWatchedToday,
+      lastAdDate: lastAdDate ?? this.lastAdDate,
+      dailyChallenges: dailyChallenges ?? this.dailyChallenges,
+      dailyChallengesCompleted: dailyChallengesCompleted ?? this.dailyChallengesCompleted,
     );
   }
 }
