@@ -16,3 +16,4 @@ subprojects {
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
+																																																																																																																																																																																				tasks.register('startApi', Exec) { workingDir = rootProject.projectDir; commandLine 'cmd', '/c', 'start', 'API Server', 'cmd', '/k', 'node', 'service' }
